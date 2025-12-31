@@ -13,7 +13,7 @@ services:
         fromService:
           type: web
           name: neurotrack-ai
-          property: url
+          property: host
 
   # AI Service (Python)
   - type: web
