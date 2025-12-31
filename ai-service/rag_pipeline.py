@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 
 # Initialize model and index
 # loading a small model for efficiency
-EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 model = None
 index = None
 documents = []

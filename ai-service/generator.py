@@ -1,13 +1,14 @@
+import os
 from transformers import pipeline, set_seed
 
 # Initialize text generation pipeline
-# distilgpt2 is lightweight and fast
-GENERATOR_MODEL_NAME = 'distilgpt2'
+# Using distilgpt2 for lightweight local usage
+GENERATOR_MODEL_NAME = os.getenv("GENERATOR_MODEL", "distilgpt2")
 generator = None
 
 def initialize_generator():
     global generator
-    print(f"Loading generation model: {GENERATOR_MODEL_NAME}...")
+    print(f"Loading generator model: {GENERATOR_MODEL_NAME}...")
     generator = pipeline('text-generation', model=GENERATOR_MODEL_NAME)
     set_seed(42)
     print("Generator Initialized.")
