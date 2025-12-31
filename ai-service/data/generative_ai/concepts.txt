@@ -1,0 +1,11 @@
+Prompt Engineering: The art of crafting inputs (prompts) to guide Generative AI models to produce desired outputs. Be specific, provide context, and use examples (few-shot prompting).
+
+Chain of Thought: Asking the AI to 'think step by step' can improve reasoning performance on complex tasks.
+
+Hallucination: A phenomenon where Generative AI models confidently generate incorrect or fabricated information. Always verify critical facts.
+
+Transformer Architecture: The underlying deep learning model for modern Generative AI (like GPT). It uses 'attention mechanisms' to weigh the importance of different words in a sentence relative to each other.
+
+Fine-Tuning: The process of training a pre-trained model on a smaller, specific dataset to specialize it for a particular task (e.g., medical diagnosis or code generation).
+
+RAG (Retrieval-Augmented Generation): Enhancing Generative AI by providing it with relevant external data (like this knowledge base) before it generates an answer. This reduces hallucinations and keeps knowledge up-to-date.

@@ -1,0 +1,27 @@
+# Environment Files (Secrets)
+.env
+backend/.env
+frontend/.env
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ai-service/embeddings/
+ai-service/vector_store/
+ai-service/__pycache__/
+
+# Node
+node_modules/
+dist/
+build/
+.output/
+
+# Logs & OS
+*.log
+.vscode/
+.idea/

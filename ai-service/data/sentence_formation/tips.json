@@ -1,0 +1,22 @@
+sentence_structure = [
+    {
+        "category": "Sentence Formation",
+        "content": "Subject-Verb-Object (SVO): The standard sentence structure in English. Example: 'The cat (Subject) chased (Verb) the mouse (Object).'"
+    },
+    {
+        "category": "Sentence Formation",
+        "content": "Active vs. Passive Voice: Use active voice for clarity and impact (e.g., 'The team completed the project'). Use passive voice when the actor is unknown or less important (e.g., 'The project was completed')."
+    },
+    {
+        "category": "Sentence Formation",
+        "content": "Parallelism: Ensure elements in a list or series follow the same grammatical structure. Incorrect: 'I like running, swimming, and to bike.' Correct: 'I like running, swimming, and biking.'"
+    },
+    {
+        "category": "Sentence Formation",
+        "content": "Compound Sentences: Combine two independent clauses using a conjunction (and, but, or) or a semicolon. Example: 'I studied hard, but the exam was difficult.'"
+    },
+    {
+        "category": "Sentence Formation",
+        "content": "Clarity: Avoid jargon and overly complex words when simple ones suffice. 'Utilize' -> 'Use'."
+    }
+]

@@ -1,0 +1,62 @@
+[
+    {
+        "category": "Study Tips",
+        "content": "Active Recall: Test yourself on the material you are learning. Don't just re-read notes."
+    },
+    {
+        "category": "Study Tips",
+        "content": "Spaced Repetition: Review material at increasing intervals to move it to long-term memory."
+    },
+    {
+        "category": "Study Tips",
+        "content": "Pomodoro Technique: Study for 25 minutes, then take a 5-minute break to maintain focus."
+    },
+    {
+        "category": "Study Tips",
+        "content": "Feynman Technique: simplify complex concepts by explaining them in plain language as if teaching a beginner."
+    },
+    {
+        "category": "Computer Science - Algorithms",
+        "content": "Big O Notation: Describes the performance or complexity of an algorithm. O(1) is constant, O(n) is linear, O(log n) is logarithmic."
+    },
+    {
+        "category": "Computer Science - Algorithms",
+        "content": "Sorting Algorithms: QuickSort is O(n log n) on average. MergeSort is stable and O(n log n). BubbleSort is O(n^2)."
+    },
+    {
+        "category": "Computer Science - Data Structures",
+        "content": "Hash Maps: O(1) average time complexity for lookups, insertions, and deletions. Uses a hash function to map keys to indices."
+    },
+    {
+        "category": "Frontend Development",
+        "content": "React Hooks: Functions that let you hook into React state and lifecycle features. Examples: useState, useEffect, useContext."
+    },
+    {
+        "category": "Frontend Development",
+        "content": "Responsive Design: Using CSS Media Queries to adapt layouts to different screen sizes (mobile, tablet, desktop)."
+    },
+    {
+        "category": "Backend Development",
+        "content": "REST API: Representational State Transfer. Uses HTTP methods (GET, POST, PUT, DELETE) to manage resources. Stateless."
+    },
+    {
+        "category": "Backend Development",
+        "content": "Database Indexing: Improves the speed of data retrieval operations on a database table at the cost of additional writes and storage space."
+    },
+    {
+        "category": "System Design",
+        "content": "Load Balancing: Distributing network traffic across multiple servers to ensure no single server bears too much demand."
+    },
+    {
+        "category": "System Design",
+        "content": "Caching: Storing copies of files in a temporary storage location (like Redis) to access them faster."
+    },
+    {
+        "category": "DevOps",
+        "content": "CI/CD: Continuous Integration and Continuous Deployment. Automating the building, testing, and deployment of applications."
+    },
+    {
+        "category": "General",
+        "content": "Consistency: Small daily progress is better than sporadic marathon sessions."
+    }
+]
