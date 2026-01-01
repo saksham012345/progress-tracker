@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, BookOpen, CheckCircle, Loader2 } from 'lucide-react';
+import { Calendar, Clock, BookOpen, CheckCircle, Loader2, Target } from 'lucide-react';
 import { API_URL } from '../config';
 
 const StudyPlanner = () => {
