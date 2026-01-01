@@ -52,9 +52,11 @@ def preprocess_data(data_items):
 import time
 import random
 
+import requests
+
 def build_index(docs):
     """
-    Generate embeddings for all documents using Gemini with Rate Limiting & Retries.
+    Generate embeddings for all documents using Gemini V1 API with Rate Limiting.
     """
     global document_embeddings, documents
     
@@ -66,50 +68,87 @@ def build_index(docs):
         print("No documents to index.")
         return 0
         
-    print(f"Indexing {len(documents)} documents with Gemini...")
+    print(f"Indexing {len(documents)} documents with Gemini V1...")
     
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("Error: No API Key found.")
+        return 0
+
     # Configuration for Rate Limiting
-    BATCH_SIZE = 5  # Small batch size for free tier
-    DELAY_SECONDS = 2 # Fixed delay between batches
+    BATCH_SIZE = 1 # Embed content does not support batch in v1 easily via simple rest without lookups
+    # Actually V1 batchEmbedContents exists but lets stick to simple 1 by 1 or check batch support
+    # To be safe and simple: 1 by 1 or V1 batch endpoint. 
+    # V1 URL: https://generativelanguage.googleapis.com/v1/models/embedding-001:batchEmbedContents
+    
+    url = "https://generativelanguage.googleapis.com/v1/models/embedding-001:batchEmbedContents"
+    
+    DELAY_SECONDS = 1
     MAX_RETRIES = 5
     
     all_embeddings = []
     
-    # Process in batches
-    for i in range(0, len(documents), BATCH_SIZE):
-        batch = documents[i:i + BATCH_SIZE]
-        print(f"Processing batch {i//BATCH_SIZE + 1}/{(len(documents)-1)//BATCH_SIZE + 1}...")
+    # Simple batching implementation for the API
+    # Max batch size for Gemini is usually higher, but let's stick to 5
+    BATCH_SIZE_API = 5
+    
+    for i in range(0, len(documents), BATCH_SIZE_API):
+        batch_docs = documents[i:i + BATCH_SIZE_API]
+        print(f"Processing batch {i//BATCH_SIZE_API + 1}...")
+        
+        # Prepare payload
+        requests_payload = {
+            "requests": [{
+                "model": "models/embedding-001",
+                "content": {"parts": [{"text": d}]},
+                "taskType": "RETRIEVAL_DOCUMENT",
+                "title": "NeuroTrack Knowledge"
+            } for d in batch_docs]
+        }
         
         retry_count = 0
+        current_batch_embeddings = []
+        
         while retry_count <= MAX_RETRIES:
             try:
-                # Batch embedding
-                result = genai.embed_content(
-                    model="models/embedding-001",
-                    content=batch,
-                    task_type="retrieval_document",
-                    title="NeuroTrack Knowledge"
+                response = requests.post(
+                    url, 
+                    headers={"Content-Type": "application/json"},
+                    params={"key": api_key},
+                    json=requests_payload,
+                    timeout=30
                 )
                 
-                if 'embedding' in result:
-                    all_embeddings.extend(result['embedding'])
-                    break # Success, move to next batch
-                else:
-                    raise ValueError("No embedding returned in result")
-                    
-            except Exception as e:
-                if "429" in str(e) or "quota" in str(e).lower():
+                if response.status_code == 200:
+                    data = response.json()
+                    # Extract embeddings
+                    if 'embeddings' in data:
+                        for emb in data['embeddings']:
+                            if 'values' in emb:
+                                current_batch_embeddings.append(emb['values'])
+                        break # Success
+                    else:
+                        print(f"Unexpected response structure: {data}")
+                        break
+                elif response.status_code == 429:
                     wait_time = (2 ** retry_count) + random.uniform(0, 1)
                     print(f"  Rate limit hit. Retrying in {wait_time:.2f}s...")
                     time.sleep(wait_time)
                     retry_count += 1
                 else:
-                    print(f"  Error embedding batch: {e}")
-                    # Appending zeros to maintain index alignment is safer than shifting indices
-                    all_embeddings.extend([[0.0]*768] * len(batch)) 
+                    print(f"  Error embedding batch: {response.text}")
                     break
+            except Exception as e:
+                 print(f"  Request Exception: {e}")
+                 retry_count += 1
+                 time.sleep(1)
         
-        # Rate limit delay between successful batches
+        # Fill missing if failed
+        if len(current_batch_embeddings) != len(batch_docs):
+             # Pad with zeros
+             current_batch_embeddings.extend([[0.0]*768] * (len(batch_docs) - len(current_batch_embeddings)))
+             
+        all_embeddings.extend(current_batch_embeddings)
         time.sleep(DELAY_SECONDS)
 
     try:
@@ -122,37 +161,53 @@ def build_index(docs):
 
 def retrieve(query, k=3):
     """
-    Retrieve top k documents using Cosine Similarity.
+    Retrieve top k documents using Cosine Similarity via V1 API.
     """
     global document_embeddings, documents
     
     if not documents or document_embeddings is None:
         return []
         
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return []
+
     try:
-        # Embed the query
-        query_result = genai.embed_content(
-            model="models/embedding-001",
-            content=query,
-            task_type="retrieval_query"
+        # Embed query
+        url = "https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent"
+        payload = {
+            "model": "models/embedding-001",
+            "content": {"parts": [{"text": query}]},
+            "taskType": "RETRIEVAL_QUERY"
+        }
+        
+        response = requests.post(
+            url, 
+            headers={"Content-Type": "application/json"},
+            params={"key": api_key},
+            json=payload,
+            timeout=10
         )
-        query_embedding = np.array(query_result['embedding'])
+        
+        if response.status_code != 200:
+            print(f"Retrieval embedding error: {response.text}")
+            return []
+            
+        data = response.json()
+        if 'embedding' not in data or 'values' not in data['embedding']:
+             return []
+             
+        query_embedding = np.array(data['embedding']['values'])
         
         # Calculate Cosine Similarity
-        # Dot product of normalized vectors (assuming Gemini output is not normalized, we strictly use dot for simplicity)
-        # For robustness, we normalize.
-        
-        # Compute norms
         doc_norms = np.linalg.norm(document_embeddings, axis=1)
         query_norm = np.linalg.norm(query_embedding)
         
-        # Avoid division by zero
         if query_norm == 0 or np.any(doc_norms == 0):
             return []
             
         scores = np.dot(document_embeddings, query_embedding) / (doc_norms * query_norm)
         
-        # Get top k indices
         top_k_indices = np.argsort(scores)[-k:][::-1]
         
         results = [documents[i] for i in top_k_indices]

@@ -7,33 +7,60 @@ if api_key:
     genai.configure(api_key=api_key)
 
 GENERATOR_MODEL_NAME = "gemini-1.5-flash"
-model = None
+import requests
+import json
+import logging
+
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+GENERATOR_MODEL_NAME = "gemini-1.5-flash"
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 def initialize_generator():
-    global model
-    
-    # Candidates in order of preference
-    candidates = [
-        "gemini-1.5-flash",
-        "gemini-1.0-pro"
-    ]
-    
-    for model_name in candidates:
-        try:
-            print(f"Attempting to load generator model: {model_name}...")
-            test_model = genai.GenerativeModel(model_name)
-            # Simple test generation to verify access
-            test_result = test_model.generate_content("Hello")
-            if test_result:
-                    model = test_model
-                    print(f"Successfully initialized: {model_name}")
-                    return
-        except Exception as e:
-            print(f"Failed to load {model_name}: {e}")
+    # Stateless REST API doesn't need initialization, but we can check the key
+    if not API_KEY:
+        print("CRITICAL: GEMINI_API_KEY not found.")
+    else:
+        print(f"Generator configured for V1 API using model: {GENERATOR_MODEL_NAME}")
+
+def call_gemini_v1(prompt, model=GENERATOR_MODEL_NAME):
+    if not API_KEY:
+        return "Error: API Key is missing."
+
+    url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    params = {
+        "key": API_KEY
+    }
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
+    try:
+        response = requests.post(url, headers=headers, params=params, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            try:
+                text = result['candidates'][0]['content']['parts'][0]['text']
+                return text
+            except (KeyError, IndexError) as e:
+                logger.error(f"Parsing Error: {e}, Response: {result}")
+                return "Error parsing AI response."
+        else:
+            logger.error(f"Gemini API V1 Error: {response.status_code} - {response.text}")
+            return f"Error: API returned {response.status_code}"
             
-    # Absolute fallback if everything fails
-    print("CRITICAL: Provide fallback using gemini-1.5-flash.")
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    except Exception as e:
+        logger.error(f"Request Error: {e}")
+        return f"Error connecting to AI service: {e}"
+
 
 def generate_chat_response(message, history, context=""):
     """
@@ -43,10 +70,6 @@ def generate_chat_response(message, history, context=""):
     greetings = ["hi", "hello", "hey", "greetings", "good morning"]
     if message.lower().strip() in greetings:
         return "Hello! I am your NeuroTrack AI Assistant. How can I help you optimize your learning today?"
-
-    global model
-    if model is None:
-        initialize_generator()
 
     try:
         # Construct a rich prompt with context
@@ -58,21 +81,14 @@ If the answer is not in the context, use your general knowledge but mention that
 Context:
 {context}
 """
-        # Convert history format if needed, or just append to prompt
-        # Gemini supports chat history objects, but for simplicity/statelessness we can append
-        
         full_prompt = f"{system_instruction}\n\nUser: {message}"
         
-        response = model.generate_content(full_prompt)
-        return response.text
+        return call_gemini_v1(full_prompt)
     except Exception as e:
         return f"I encountered an error: {str(e)}"
 
+
 def generate_study_plan(topics, goals, hours_per_week):
-    global model
-    if model is None:
-        initialize_generator()
-        
     prompt = f"""
     Create a personalized weekly study plan.
     Topics: {', '.join(topics)}
@@ -81,22 +97,12 @@ def generate_study_plan(topics, goals, hours_per_week):
     
     Format the output as a clear Weekly Schedule with daily activities.
     """
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Error generating plan: {str(e)}"
+    return call_gemini_v1(prompt)
+
 
 def generate_text(prompt, max_length=200):
-    global model
-    if model is None:
-        initialize_generator()
-        
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Error: {str(e)}"
+    return call_gemini_v1(prompt)
+
 
 def construct_prompt(query, context_docs):
     context_str = "\n".join(context_docs)
