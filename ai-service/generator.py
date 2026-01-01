@@ -15,7 +15,6 @@ def initialize_generator():
     # Candidates in order of preference
     candidates = [
         "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
         "gemini-1.0-pro"
     ]
     
