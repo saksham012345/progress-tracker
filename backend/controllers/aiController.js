@@ -122,11 +122,7 @@ exports.getResources = async (req, res) => {
         const response = await aiClient.get('/rag/knowledge');
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
-        res.status(502).json({
-            message: "Could not fetch resources.",
-            error: err.message
-        });
+        handleAiError(res, err);
     }
 };
 
@@ -140,9 +136,27 @@ exports.addResource = async (req, res) => {
         });
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
+        handleAiError(res, err);
+    }
+};
+
+// Helper function for consistent error handling
+const handleAiError = (res, err) => {
+    console.error("AI Service Error:", err.message);
+    if (err.response) {
+        // Upstream service returned an error (4xx, 5xx)
+        // Pass through the status and data
+        res.status(err.response.status).json(err.response.data);
+    } else if (err.request) {
+        // Request made but no response (Timeout/Network)
+        res.status(504).json({
+            message: "AI Service Timeout",
+            error: "The AI service is talking too long to respond. It works on a free tier and might be waking up. Please try again in 30 seconds."
+        });
+    } else {
+        // Something else happened
         res.status(502).json({
-            message: "Could not add resource.",
+            message: "AI Service Connectivity Error",
             error: err.message
         });
     }
