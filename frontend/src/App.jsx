@@ -12,6 +12,7 @@ import Analytics from './pages/Analytics';
 import TopicDetail from './pages/TopicDetail';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Settings from './pages/Settings';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -82,6 +83,11 @@ const AppRoutes = () => {
         <Route path="/topic/:id" element={
           <PrivateRoute>
             <TopicDetail />
+          </PrivateRoute>
+        } />
+        <Route path="/settings" element={
+          <PrivateRoute>
+            <Settings />
           </PrivateRoute>
         } />
       </Routes>
