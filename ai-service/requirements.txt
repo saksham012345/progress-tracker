@@ -3,6 +3,6 @@ uvicorn
 optimum
 onnxruntime
 transformers
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
 numpy
 requests
