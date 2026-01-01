@@ -69,7 +69,7 @@ def build_index(docs):
         # Batch embedding (Gemini supports batching)
         # embedding-001 is the model
         result = genai.embed_content(
-            model="models/embedding-001",
+            model="models/text-embedding-004",
             content=documents,
             task_type="retrieval_document",
             title="NeuroTrack Knowledge"
@@ -96,7 +96,7 @@ def retrieve(query, k=3):
     try:
         # Embed the query
         query_result = genai.embed_content(
-            model="models/embedding-001",
+            model="models/text-embedding-004",
             content=query,
             task_type="retrieval_query"
         )
