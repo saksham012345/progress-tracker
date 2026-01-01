@@ -30,13 +30,13 @@ class ImproveNotesRequest(BaseModel):
     topic: str = None
 
 class StudyPlanRequest(BaseModel):
-    topics: list[str]
+    topics: List[str]
     goals: str
     hours_per_week: int
 
 class ChatRequest(BaseModel):
     message: str
-    history: list[dict] = []
+    history: List[dict] = []
 
 import threading
 
