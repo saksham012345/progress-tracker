@@ -3,7 +3,13 @@ const Topic = require('../models/Topic');
 // We need sessions too to pass to RAG
 const Session = require('../models/Session');
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+let AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+
+// Ensure protocol exists (Render provides host without protocol sometimes)
+if (!AI_SERVICE_URL.startsWith('http')) {
+    AI_SERVICE_URL = `https://${AI_SERVICE_URL}`;
+}
+
 // Create an axios instance with long timeout for AI generation (Render Cold Starts)
 const aiClient = axios.create({
     baseURL: AI_SERVICE_URL,
