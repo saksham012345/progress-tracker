@@ -1,35 +1,97 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, AuthContext } from './context/AuthContext';
+import styles from './index.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+// Pages
+import Dashboard from './pages/Dashboard';
+import StudyPlanner from './pages/StudyPlanner';
+import Resources from './pages/Resources';
+import Analytics from './pages/Analytics';
+import TopicDetail from './pages/TopicDetail';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+
+// Components
+import Sidebar from './components/Sidebar';
+import ChatWidget from './components/ChatWidget';
+
+const PrivateRoute = ({ children }) => {
+  const { user, loading } = useContext(AuthContext);
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20%' }}>Loading...</div>;
+
+  return user ? children : <Navigate to="/login" />;
+};
+
+const Layout = ({ children }) => {
+  const location = useLocation();
+  // Don't show sidebar/chat on auth pages
+  const isAuthPage = ['/login', '/signup'].includes(location.pathname);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {!isAuthPage && <Sidebar />}
+      <main style={{
+        flex: 1,
+        padding: isAuthPage ? '2rem' : '2rem 3rem',
+        marginLeft: isAuthPage ? 0 : '250px', // Match sidebar width
+        maxWidth: '1600px'
+      }}>
+        {children}
+      </main>
+      {!isAuthPage && <ChatWidget />}
+    </div>
+  );
+};
+
+const AppRoutes = () => {
+  return (
+    <Layout>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Private Routes */}
+        <Route path="/" element={
+          <PrivateRoute>
+            <Dashboard />
+          </PrivateRoute>
+        } />
+        <Route path="/planner" element={
+          <PrivateRoute>
+            <StudyPlanner />
+          </PrivateRoute>
+        } />
+        <Route path="/resources" element={
+          <PrivateRoute>
+            <Resources />
+          </PrivateRoute>
+        } />
+        <Route path="/analytics" element={
+          <PrivateRoute>
+            <Analytics />
+          </PrivateRoute>
+        } />
+        <Route path="/topic/:id" element={
+          <PrivateRoute>
+            <TopicDetail />
+          </PrivateRoute>
+        } />
+      </Routes>
+    </Layout>
+  );
+};
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </Router>
+  );
 }
 
-export default App
+export default App;

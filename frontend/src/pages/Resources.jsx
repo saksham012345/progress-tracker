@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Book, RefreshCw } from 'lucide-react';
+import { Search, Book, FileText, ExternalLink, Filter } from 'lucide-react';
+import { API_URL } from '../config';
 
 const Resources = () => {
     const [resources, setResources] = useState([]);

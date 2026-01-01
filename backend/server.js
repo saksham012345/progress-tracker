@@ -24,7 +24,9 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 // Routes
 const apiRoutes = require('./routes/api');
+const authRoutes = require('./routes/auth');
 app.use('/api', apiRoutes);
+app.use('/api/auth', authRoutes);
 
 // Error Handler (Must be last)
 app.use(errorHandler);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Loader2 } from 'lucide-react';
 import TopicCard from '../components/TopicCard';
+import { API_URL } from '../config';
 
 const Dashboard = () => {
     const [topics, setTopics] = useState([]);
@@ -15,7 +16,7 @@ const Dashboard = () => {
 
     const fetchTopics = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/topics');
+            const res = await fetch(`${API_URL}/api/topics`);
             const data = await res.json();
             setTopics(data);
         } catch (err) {

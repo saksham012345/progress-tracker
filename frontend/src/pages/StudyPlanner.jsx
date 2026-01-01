@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, Target, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, BookOpen, CheckCircle, Loader2 } from 'lucide-react';
+import { API_URL } from '../config';
 
 const StudyPlanner = () => {
     const [formData, setFormData] = useState({
@@ -17,7 +18,7 @@ const StudyPlanner = () => {
         setPlan('');
 
         try {
-            const res = await fetch('http://localhost:5000/api/ai/plan', {
+            const res = await fetch(`${API_URL}/api/ai/plan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

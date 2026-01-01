@@ -1,102 +1,74 @@
 import os
-from transformers import pipeline, set_seed
+from optimum.onnxruntime import ORTModelForSeq2SeqLM
+from transformers import AutoTokenizer
 
-# Initialize text generation pipeline
-# Using distilgpt2 for lightweight local usage
-GENERATOR_MODEL_NAME = os.getenv("GENERATOR_MODEL", "distilgpt2")
-generator = None
+# Using LaMini-Flan-T5-77M for ultra-low memory footprint (Int8 Quantized)
+# Roughly 80MB model size.
+GENERATOR_MODEL_NAME = os.getenv("GENERATOR_MODEL", "Xenova/LaMini-Flan-T5-77M")
+model = None
+tokenizer = None
 
 def initialize_generator():
-    global generator
-    print(f"Loading generator model: {GENERATOR_MODEL_NAME}...")
-    generator = pipeline('text-generation', model=GENERATOR_MODEL_NAME)
-    set_seed(42)
+    global model, tokenizer
+    print(f"Loading generator model (ONNX): {GENERATOR_MODEL_NAME}...")
+    
+    # Load quantized model for efficiency
+    tokenizer = AutoTokenizer.from_pretrained(GENERATOR_MODEL_NAME)
+    model = ORTModelForSeq2SeqLM.from_pretrained(GENERATOR_MODEL_NAME)
+    
     print("Generator Initialized.")
 
 def generate_chat_response(message, history, context=""):
     """
     Generate a conversational response using history and context.
     """
-    # Limit history to last 3 items to keep prompt small
-    recent_history = history[-3:]
-    
+    # Simple history formatting
     history_text = ""
-    for msg in recent_history:
-        role = "User" if msg['role'] == 'user' else "Assistant"
-        history_text += f"{role}: {msg['content']}\n"
+    for msg in history[-2:]: # minimal history
+        history_text += f"{msg['role']}: {msg['content']}\n"
         
     prompt = f"""
-    Act as a helpful study assistant. Use the context to answer the user.
+    Answer the user question based on the context.
+    Context: {context[:300]}
     
-    Context:
-    {context[:500]}...
-    
-    Conversation:
-    {history_text}
     User: {message}
-    Assistant:
+    Answer:
     """
     
-    # Assuming generate_text is a global function as per existing structure
     return generate_text(prompt, max_length=150)
 
 def generate_study_plan(topics, goals, hours_per_week):
-    """
-    Generate a structured study plan.
-    """
     prompt = f"""
-    Act as an expert academic advisor. Create a weekly study schedule for a student.
+    Create a weekly study plan.
+    Topics: {', '.join(topics)}
+    Goals: {goals}
+    Time: {hours_per_week} hours/week
     
-    Input:
-    - Topics: {', '.join(topics)}
-    - Goal: {goals}
-    - Available Time: {hours_per_week} hours/week
-    
-    Output format:
-    Day 1: [Topic] - [Activity] (Time)
-    Day 2: [Topic] - [Activity] (Time)
-    ...
-    
-    Weekly Schedule:
+    Plan:
     """
-    
-    # We assume the model can handle this simple instruction.
-    # For small models like distilgpt2, output might be repetitive, 
-    # but it proves the pipeline works.
-    
-    return generate_text(prompt, max_length=300)
+    return generate_text(prompt, max_length=200)
 
 def generate_text(prompt, max_length=150):
-    global generator
-    if generator is None:
+    global model, tokenizer
+    if model is None:
         initialize_generator()
         
     try:
-        response = generator(prompt, max_length=max_length, num_return_sequences=1, truncation=True)
-        return response[0]['generated_text']
+        inputs = tokenizer(prompt, return_tensors="pt")
+        # Generate with aggressive optimization parameters
+        gen_tokens = model.generate(
+            **inputs, 
+            max_new_tokens=max_length,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9
+        )
+        response = tokenizer.batch_decode(gen_tokens, skip_special_tokens=True)[0]
+        return response
     except Exception as e:
         print(f"Generation Error: {e}")
         return "Error generating response."
 
 def construct_prompt(query, context_docs):
-    """
-    Construct a prompt combining query and retrieved context.
-    Uses a structured format to guide the small model.
-    """
-    context_str = "\n- ".join(context_docs)
-    
-    # Prompt engineering for small model (distilgpt2)
-    # It works best with clear patterns.
-    prompt = f"""
-I am an expert study assistant. I analyze learning data and give advice.
-
-[Context]
-- {context_str}
-
-[Question]
-{query}
-
-[Answer]
-Based on the context, here is the summary/advice:
-"""
-    return prompt
+    context_str = " ".join(context_docs)
+    return f"Context: {context_str}\nQuestion: {query}\nAnswer:"

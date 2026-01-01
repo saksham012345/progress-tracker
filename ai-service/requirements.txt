@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-sentence-transformers
-faiss-cpu
+optimum
+onnxruntime
 transformers
 torch
 numpy

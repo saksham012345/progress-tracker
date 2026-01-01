@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Send, User, Bot } from 'lucide-react';
+import { API_URL } from '../config';
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -30,7 +31,8 @@ const ChatWidget = () => {
 
         try {
             // Send entire history for context
-            const res = await fetch('http://localhost:5000/api/ai/chat', {
+            // Send entire history for context
+            const res = await fetch(`${API_URL}/api/ai/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
