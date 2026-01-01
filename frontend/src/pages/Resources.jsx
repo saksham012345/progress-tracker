@@ -13,7 +13,7 @@ const Resources = () => {
 
     const fetchResources = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/ai/resources');
+            const res = await fetch(`${API_URL}/api/ai/resources`);
             if (res.ok) {
                 const data = await res.json();
                 setResources(data);

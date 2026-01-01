@@ -22,6 +22,11 @@ def generate_chat_response(message, history, context=""):
     """
     Generate a conversational response using history and context.
     """
+    # 0. Basic Greetings Bypass (Fast response)
+    greetings = ["hi", "hello", "hey", "greetings", "good morning", "good evening"]
+    if message.lower().strip() in greetings:
+        return "Hello! I am your NeuroTrack AI Assistant. How can I help you optimize your learning today?"
+
     # Simple history formatting
     history_text = ""
     for msg in history[-2:]: # minimal history
