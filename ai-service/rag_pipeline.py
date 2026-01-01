@@ -85,7 +85,7 @@ def build_index(docs):
             try:
                 # Batch embedding
                 result = genai.embed_content(
-                    model="models/text-embedding-004",
+                    model="models/embedding-001",
                     content=batch,
                     task_type="retrieval_document",
                     title="NeuroTrack Knowledge"
@@ -132,7 +132,7 @@ def retrieve(query, k=3):
     try:
         # Embed the query
         query_result = genai.embed_content(
-            model="models/text-embedding-004",
+            model="models/embedding-001",
             content=query,
             task_type="retrieval_query"
         )
