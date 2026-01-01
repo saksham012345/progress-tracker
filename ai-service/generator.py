@@ -11,9 +11,31 @@ model = None
 
 def initialize_generator():
     global model
-    print(f"Loading generator model: {GENERATOR_MODEL_NAME}...")
-    model = genai.GenerativeModel(GENERATOR_MODEL_NAME)
-    print("Generator Initialized.")
+    
+    # Try models in order of preference (Flash is fastest/cheapest, Pro is powerful, 1.0 is legacy stable)
+    candidates = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
+    ]
+    
+    for model_name in candidates:
+        try:
+            print(f"Attempting to load generator model: {model_name}...")
+            test_model = genai.GenerativeModel(model_name)
+            # Simple test generation to verify access
+            test_result = test_model.generate_content("Hello")
+            if test_result:
+                 model = test_model
+                 print(f"Successfully initialized: {model_name}")
+                 return
+        except Exception as e:
+            print(f"Failed to load {model_name}: {e}")
+            
+    # Absolute fallback if everything fails
+    print("CRITICAL: Could not load any Gemeni models. Service may fail.")
+    model = genai.GenerativeModel("gemini-pro") # Final hail mary
 
 def generate_chat_response(message, history, context=""):
     """

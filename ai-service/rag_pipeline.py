@@ -49,9 +49,12 @@ def preprocess_data(data_items):
             
     return documents
 
+import time
+import random
+
 def build_index(docs):
     """
-    Generate embeddings for all documents using Gemini.
+    Generate embeddings for all documents using Gemini with Rate Limiting & Retries.
     """
     global document_embeddings, documents
     
@@ -65,23 +68,56 @@ def build_index(docs):
         
     print(f"Indexing {len(documents)} documents with Gemini...")
     
-    try:
-        # Batch embedding (Gemini supports batching)
-        # embedding-001 is the model
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=documents,
-            task_type="retrieval_document",
-            title="NeuroTrack Knowledge"
-        )
+    # Configuration for Rate Limiting
+    BATCH_SIZE = 5  # Small batch size for free tier
+    DELAY_SECONDS = 2 # Fixed delay between batches
+    MAX_RETRIES = 5
+    
+    all_embeddings = []
+    
+    # Process in batches
+    for i in range(0, len(documents), BATCH_SIZE):
+        batch = documents[i:i + BATCH_SIZE]
+        print(f"Processing batch {i//BATCH_SIZE + 1}/{(len(documents)-1)//BATCH_SIZE + 1}...")
         
-        # 'embedding' key maps to list of embeddings
-        document_embeddings = np.array(result['embedding'])
+        retry_count = 0
+        while retry_count <= MAX_RETRIES:
+            try:
+                # Batch embedding
+                result = genai.embed_content(
+                    model="models/text-embedding-004",
+                    content=batch,
+                    task_type="retrieval_document",
+                    title="NeuroTrack Knowledge"
+                )
+                
+                if 'embedding' in result:
+                    all_embeddings.extend(result['embedding'])
+                    break # Success, move to next batch
+                else:
+                    raise ValueError("No embedding returned in result")
+                    
+            except Exception as e:
+                if "429" in str(e) or "quota" in str(e).lower():
+                    wait_time = (2 ** retry_count) + random.uniform(0, 1)
+                    print(f"  Rate limit hit. Retrying in {wait_time:.2f}s...")
+                    time.sleep(wait_time)
+                    retry_count += 1
+                else:
+                    print(f"  Error embedding batch: {e}")
+                    # Appending zeros to maintain index alignment is safer than shifting indices
+                    all_embeddings.extend([[0.0]*768] * len(batch)) 
+                    break
+        
+        # Rate limit delay between successful batches
+        time.sleep(DELAY_SECONDS)
+
+    try:
+        document_embeddings = np.array(all_embeddings)
         print("Indexing complete.")
         return len(documents)
-        
     except Exception as e:
-        print(f"Embedding Error: {e}")
+        print(f"Error finalizing index: {e}")
         return 0
 
 def retrieve(query, k=3):
