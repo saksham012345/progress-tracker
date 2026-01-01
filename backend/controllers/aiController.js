@@ -4,6 +4,11 @@ const Topic = require('../models/Topic');
 const Session = require('../models/Session');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+// Create an axios instance with long timeout for AI generation (Render Cold Starts)
+const aiClient = axios.create({
+    baseURL: AI_SERVICE_URL,
+    timeout: 60000 // 60 seconds
+});
 
 exports.summarizeProgress = async (req, res) => {
     try {
@@ -14,7 +19,7 @@ exports.summarizeProgress = async (req, res) => {
 
         const userQuery = req.body.query || "Summarize my progress";
 
-        const response = await axios.post(`${AI_SERVICE_URL}/rag/analyze`, {
+        const response = await aiClient.post('/rag/analyze', {
             topics,
             sessions,
             query: userQuery
@@ -38,7 +43,7 @@ exports.improveNotes = async (req, res) => {
     }
 
     try {
-        const response = await axios.post(`${AI_SERVICE_URL}/rag/improve-notes`, {
+        const response = await aiClient.post('/rag/improve-notes', {
             notes,
             topic: topic || "General"
         });
@@ -58,7 +63,7 @@ exports.chat = async (req, res) => {
         const { message, history } = req.body;
 
         // Pass history to Python service for context
-        const response = await axios.post(`${AI_SERVICE_URL}/rag/chat`, {
+        const response = await aiClient.post('/rag/chat', {
             message,
             history: history || []
         });
@@ -76,7 +81,7 @@ exports.chat = async (req, res) => {
 exports.generateStudyPlan = async (req, res) => {
     try {
         const { topics, goals, hours } = req.body;
-        const response = await axios.post(`${AI_SERVICE_URL}/rag/plan`, {
+        const response = await aiClient.post('/rag/plan', {
             topics,
             goals,
             hours_per_week: parseInt(hours) || 10
@@ -93,7 +98,7 @@ exports.generateStudyPlan = async (req, res) => {
 
 exports.getResources = async (req, res) => {
     try {
-        const response = await axios.get(`${AI_SERVICE_URL}/rag/knowledge`);
+        const response = await aiClient.get('/rag/knowledge');
         res.json(response.data);
     } catch (err) {
         console.error("AI Service Error:", err.message);
@@ -108,7 +113,7 @@ exports.addResource = async (req, res) => {
     try {
         const { category, content } = req.body;
         // Proxy to AI Service
-        const response = await axios.post(`${AI_SERVICE_URL}/rag/knowledge`, {
+        const response = await aiClient.post('/rag/knowledge', {
             category,
             content
         });
