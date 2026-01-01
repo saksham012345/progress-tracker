@@ -14,13 +14,28 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev')); // Request logging
 
+// Root Route (for health check)
+app.get('/', (req, res) => {
+    res.json({
+        status: 'online',
+        message: 'NeuroTrack Backend is running',
+        dbStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+});
+
 // Database Connection
+console.log("🔌 Attempting to connect to MongoDB...");
+console.log("📝 MONGODB_URI is set:", !!process.env.MONGODB_URI); // Log true/false only for security
+
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-    .then(() => console.log('MongoDB connection established'))
-    .catch(err => console.error('MongoDB connection error:', err));
+    .then(() => console.log('✅ MongoDB connection established successfully'))
+    .catch(err => {
+        console.error('❌ MongoDB connection error:', err.message);
+        console.error('   (Check your Render Environment Variable MONGODB_URI)');
+    });
 
 // Routes
 const apiRoutes = require('./routes/api');
