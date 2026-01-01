@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, BarChart2, Book, Settings, BookOpen, Target } from 'lucide-react';
 import { motion } from 'framer-motion';
+import ThemeToggle from './ThemeToggle';
 
 const Sidebar = () => {
     const navItems = [
@@ -55,7 +56,7 @@ const Sidebar = () => {
             </nav>
 
             <div style={{ marginTop: 'auto', padding: '1rem 0', borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                     <div style={{
                         width: '32px', height: '32px', borderRadius: '50%',
                         background: 'linear-gradient(45deg, var(--accent), #8b5cf6)'
@@ -65,6 +66,7 @@ const Sidebar = () => {
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pro Plan</p>
                     </div>
                 </div>
+                <ThemeToggle />
             </div>
         </div>
     );
