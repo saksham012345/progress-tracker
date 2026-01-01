@@ -29,19 +29,59 @@ const PrivateRoute = ({ children }) => {
 
 const Layout = ({ children }) => {
   const location = useLocation();
-  // Don't show sidebar/chat on auth pages
   const isAuthPage = ['/login', '/signup'].includes(location.pathname);
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close sidebar on route change (mobile)
+  React.useEffect(() => {
+    if (isMobile) setMobileSidebarOpen(false);
+  }, [location, isMobile]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', position: 'relative', overflowX: 'hidden' }}>
       <AnimatedBackground />
-      {!isAuthPage && <Sidebar />}
+
+      {/* Mobile Hamburger */}
+      {!isAuthPage && isMobile && (
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          style={{
+            position: 'fixed', top: '20px', left: '20px', zIndex: 60,
+            background: 'var(--card-bg)', border: '1px solid var(--border)',
+            borderRadius: '8px', padding: '8px',
+            backdropFilter: 'blur(12px)', color: 'var(--text-primary)'
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 12h18M3 6h18M3 18h18" />
+          </svg>
+        </button>
+      )}
+
+      {/* Sidebar - Pass mobile state */}
+      {!isAuthPage && (
+        <Sidebar
+          isMobile={isMobile}
+          isOpen={mobileSidebarOpen}
+          onClose={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       <main style={{
         flex: 1,
-        padding: isAuthPage ? '2rem' : '2rem 3rem',
-        marginLeft: isAuthPage ? 0 : '280px', // Increased for floating sidebar
+        padding: isAuthPage || isMobile ? '2rem 1.5rem' : '2rem 3rem', // Less padding on mobile
+        marginLeft: isAuthPage || isMobile ? 0 : '280px', // No margin on mobile
+        marginTop: isMobile && !isAuthPage ? '60px' : '0', // Space for hamburger
         maxWidth: '1600px',
         position: 'relative',
+        width: '100%', // Ensure full width
         zIndex: 10
       }}>
         {children}
