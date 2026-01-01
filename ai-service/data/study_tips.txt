@@ -1,0 +1,11 @@
+# Effective Study Techniques
+
+1. **The Pomodoro Technique**: Study for 25 minutes, take a 5-minute break. After 4 cycles, take a longer 15-30 minute break. This keeps your mind fresh and focused.
+
+2. **Active Recall**: Don't just re-read your notes. Close the book and try to recite what you learned. This strengthens neural pathways.
+
+3. **Spaced Repetition**: Review material at increasing intervals (1 day, 3 days, 1 week, 1 month). This combats the "forgetting curve".
+
+4. **Feynman Technique**: Try to explain a concept in simple terms, as if teaching a child. Use analogies. If you get stuck, go back to the source material.
+
+5. **Interleaved Practice**: Don't study one topic for too long. Mix different subjects or types of problems. This improves your brain's ability to differentiate and apply knowledge.

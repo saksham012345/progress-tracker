@@ -147,31 +147,64 @@ async def generate_study_plan(request: StudyPlanRequest):
     
     return {"plan": final_plan}
 
+class ResourceRequest(BaseModel):
+    category: str
+    content: str
+
+@app.post("/rag/knowledge")
+async def add_knowledge(request: ResourceRequest):
+    """
+    Allow users to add new resources to the knowledge base.
+    """
+    try:
+        # Prepend to documents so it's fresh
+        doc_text = f"User Resource ({request.category}): {request.content}"
+        rag_pipeline.documents.insert(0, doc_text)
+        
+        # Re-index (incremental would be better, but for small RAM, full rebuild is safer/simpler)
+        # Note: In a real DB, we'd save this. Here it's in-memory for the session.
+        # Ideally, backend saves it to MongoDB, then we fetch it.
+        # But for this endpoint, we just add to runtime.
+        # Ideally, we should trigger a background re-index.
+        
+        return {"status": "added", "count": len(rag_pipeline.documents)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/rag/knowledge")
 def get_knowledge_base():
     """
     Return all loaded documents for the Resources page.
     """
-    # In a real app with Faiss, we can't easily "list" everything back from the index alone if we didn't store metadata.
-    # But we have `rag_pipeline.documents` which stores the raw text.
-    
-    # Simple parsing to try and reconstruct category/content if possible, 
-    # or just return the raw strings.
-    
     docs = []
+    
+    # 1. Static Files (formatted nicely)
+    # We loaded them as raw chunks in rag_pipeline. 
+    # Let's try to detect if they are markdown sections.
+    
     for d in rag_pipeline.documents:
-        # We formatted them as "General Knowledge (Category): Content"
-        # Let's try to parse that back for UI
-        if "General Knowledge (" in d:
+        # User/System formatted strings
+        if "User Resource (" in d:
             parts = d.split("): ", 1)
-            if len(parts) == 2:
-                cat = parts[0].replace("General Knowledge (", "")
-                content = parts[1]
-                docs.append({"category": cat, "content": content})
-            else:
-                docs.append({"category": "General", "content": d})
-        elif "Session on" not in d and "Topic:" not in d: # Exclude user data
-             docs.append({"category": "Custom Data", "content": d})
+            cat = parts[0].replace("User Resource (", "")
+            content = parts[1] if len(parts) > 1 else d
+            docs.append({"category": cat, "content": content})
+            
+        elif "# " in d and "**" in d: # Simple MD detection
+             # Guess category from first line
+             lines = d.split('\n')
+             cat_line = lines[0].replace("#", "").strip()
+             content = "\n".join(lines[1:]).strip()
+             docs.append({"category": "Guide", "title": cat_line, "content": content})
+             
+        elif "General Knowledge (" in d:
+            parts = d.split("): ", 1)
+            cat = parts[0].replace("General Knowledge (", "")
+            docs.append({"category": cat, "content": parts[1]})
+            
+        elif "Session on" not in d and "Topic:" not in d: # Exclude raw user data
+             # Check if it's one of our markdown files
+             docs.append({"category": "Study Material", "content": d})
              
     return docs
 

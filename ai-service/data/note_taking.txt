@@ -1,0 +1,23 @@
+# Note-Taking Strategies for Computer Science
+
+## The Cornell Method
+Split your page into three sections:
+- **Cues (Left)**: Keywords, questions, or main ideas.
+- **Notes (Right)**: Main points, diagrams, and detailed explanations.
+- **Summary (Bottom)**: A brief 2-3 sentence summary of the page.
+
+## Flow-Based Notes
+Don't write linear text. Connect ideas with arrows and lines. This is great for:
+- Algorithms
+- System Architecture
+- Database Relationships
+
+## Code Snippets
+Always write pseudo-code first. Don't worry about syntax. capture the *logic*.
+```python
+def learn(topic):
+    while not understood:
+        practice()
+        ask_questions()
+    return mastery
+```

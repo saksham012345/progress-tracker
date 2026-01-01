@@ -3,7 +3,7 @@ const Topic = require('../models/Topic');
 // We need sessions too to pass to RAG
 const Session = require('../models/Session');
 
-const AI_SERVICE_URL = 'http://127.0.0.1:8000';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 exports.summarizeProgress = async (req, res) => {
     try {
