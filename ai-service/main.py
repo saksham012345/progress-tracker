@@ -38,16 +38,23 @@ class ChatRequest(BaseModel):
     message: str
     history: list[dict] = []
 
-@app.on_event("startup")
-async def startup_event():
-    # Load data on startup
-    # In a real app, this might be async or offloaded
+import threading
+
+def run_async_init():
     try:
+        print("Starting background initialization of RAG index...")
         # Preprocess data loads custom data from ai-service/data internally
         docs = rag_pipeline.preprocess_data([]) 
         rag_pipeline.build_index(docs)
+        print("Background initialization complete.")
     except Exception as e:
         print(f"Startup Error: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    # Load data on startup in a separate thread to avoid blocking the event loop
+    # This ensures the server binds to the port immediately and passes health checks
+    threading.Thread(target=run_async_init, daemon=True).start()
 
 @app.post("/rag/chat")
 async def chat_endpoint(request: ChatRequest):
