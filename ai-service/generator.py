@@ -6,34 +6,34 @@ api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-    GENERATOR_MODEL_NAME = "gemini-1.5-pro"
-    model = None
+GENERATOR_MODEL_NAME = "gemini-1.5-pro"
+model = None
 
-    def initialize_generator():
-        global model
-        
-        # Strict user-defined candidates
-        candidates = [
-            "gemini-1.5-pro",
-            "gemini-1.5-pro-latest"
-        ]
-        
-        for model_name in candidates:
-            try:
-                print(f"Attempting to load generator model: {model_name}...")
-                test_model = genai.GenerativeModel(model_name)
-                # Simple test generation to verify access
-                test_result = test_model.generate_content("Hello")
-                if test_result:
-                     model = test_model
-                     print(f"Successfully initialized: {model_name}")
-                     return
-            except Exception as e:
-                print(f"Failed to load {model_name}: {e}")
-                
-        # Absolute fallback if everything fails
-        print("CRITICAL: Provide fallback using gemini-1.5-pro.")
-        model = genai.GenerativeModel("gemini-1.5-pro")
+def initialize_generator():
+    global model
+    
+    # Strict user-defined candidates
+    candidates = [
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-latest"
+    ]
+    
+    for model_name in candidates:
+        try:
+            print(f"Attempting to load generator model: {model_name}...")
+            test_model = genai.GenerativeModel(model_name)
+            # Simple test generation to verify access
+            test_result = test_model.generate_content("Hello")
+            if test_result:
+                    model = test_model
+                    print(f"Successfully initialized: {model_name}")
+                    return
+        except Exception as e:
+            print(f"Failed to load {model_name}: {e}")
+            
+    # Absolute fallback if everything fails
+    print("CRITICAL: Provide fallback using gemini-1.5-pro.")
+    model = genai.GenerativeModel("gemini-1.5-pro")
 
 def generate_chat_response(message, history, context=""):
     """

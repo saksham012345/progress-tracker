@@ -220,8 +220,8 @@ const Dashboard = () => {
                     animate="visible"
                     style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-                        gap: '2rem'
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                        gap: '1.5rem'
                     }}
                 >
                     {topics.map(topic => (
