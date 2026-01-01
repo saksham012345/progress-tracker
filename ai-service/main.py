@@ -67,29 +67,8 @@ async def chat_endpoint(request: ChatRequest):
     
     return {"reply": final_response}
 
-@app.post("/rag/study-plan")
-async def generate_study_plan(request: StudyPlanRequest):
-    # This is a placeholder for the study plan generation logic.
-    # It would typically involve using the RAG pipeline or a generator
-    # to create a personalized study plan based on the provided topics, goals,
-    # and available study time.
-
-    # Example prompt construction:
-    prompt = f"""
-    Generate a personalized study plan based on the following information:
-    Topics to cover: {', '.join(request.topics)}
-    Goals: {request.goals}
-    Available study hours per week: {request.hours_per_week}
-
-    Please provide a structured study plan, including suggested resources or activities.
-    """
-    
-    # For now, we'll just return a mock response or use the generator directly
-    # In a real scenario, you might retrieve relevant documents first.
-    response_text = generator.generate_text(prompt, max_length=500)
-    final_response = response_text.replace(prompt, "").strip()
-
-    return {"studyPlan": final_response}
+# Removed duplicate /rag/study-plan logic
+# ...
 
 @app.post("/rag/analyze")
 async def analyze_progress(request: AnalyzeRequest):

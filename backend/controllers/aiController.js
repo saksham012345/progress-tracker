@@ -89,10 +89,25 @@ exports.generateStudyPlan = async (req, res) => {
         res.json(response.data);
     } catch (err) {
         console.error("AI Service Error:", err.message);
-        res.status(502).json({
-            message: "Could not generate plan.",
-            error: err.message
-        });
+        if (err.response) {
+            // Upstream service returned an error (4xx, 5xx)
+            res.status(err.response.status).json({
+                message: "AI Service Error",
+                error: err.response.data
+            });
+        } else if (err.request) {
+            // Request made but no response (Timeout/Network)
+            res.status(504).json({
+                message: "AI Service Timeout",
+                error: "No response received from AI service. It might be starting up."
+            });
+        } else {
+            // Something else happened
+            res.status(500).json({
+                message: "Internal Server Error",
+                error: err.message
+            });
+        }
     }
 };
 
