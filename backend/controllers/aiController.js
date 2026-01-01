@@ -103,3 +103,21 @@ exports.getResources = async (req, res) => {
         });
     }
 };
+
+exports.addResource = async (req, res) => {
+    try {
+        const { category, content } = req.body;
+        // Proxy to AI Service
+        const response = await axios.post(`${AI_SERVICE_URL}/rag/knowledge`, {
+            category,
+            content
+        });
+        res.json(response.data);
+    } catch (err) {
+        console.error("AI Service Error:", err.message);
+        res.status(502).json({
+            message: "Could not add resource.",
+            error: err.message
+        });
+    }
+};

@@ -24,5 +24,6 @@ router.post('/ai/improve-notes', aiController.improveNotes);
 router.post('/ai/plan', aiController.generateStudyPlan);
 router.post('/ai/chat', aiController.chat);
 router.get('/ai/resources', aiController.getResources);
+router.post('/ai/resources', aiController.addResource);
 
 module.exports = router;
