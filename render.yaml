@@ -4,8 +4,9 @@ services:
     name: neurotrack-backend
     env: node
     plan: free
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && node server.js
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
     envVars:
       - key: MONGODB_URI
         sync: false
@@ -20,5 +21,6 @@ services:
     name: neurotrack-ai
     env: python
     plan: free
-    buildCommand: cd ai-service && pip install -r requirements.txt
-    startCommand: cd ai-service && uvicorn main:app --host 0.0.0.0 --port $PORT
+    rootDir: ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
