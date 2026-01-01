@@ -6,16 +6,17 @@ api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-GENERATOR_MODEL_NAME = "gemini-1.5-pro"
+GENERATOR_MODEL_NAME = "gemini-1.5-flash"
 model = None
 
 def initialize_generator():
     global model
     
-    # Strict user-defined candidates
+    # Candidates in order of preference
     candidates = [
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-latest"
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.0-pro"
     ]
     
     for model_name in candidates:
@@ -32,8 +33,8 @@ def initialize_generator():
             print(f"Failed to load {model_name}: {e}")
             
     # Absolute fallback if everything fails
-    print("CRITICAL: Provide fallback using gemini-1.5-pro.")
-    model = genai.GenerativeModel("gemini-1.5-pro")
+    print("CRITICAL: Provide fallback using gemini-1.5-flash.")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
 def generate_chat_response(message, history, context=""):
     """
