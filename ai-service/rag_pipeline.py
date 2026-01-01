@@ -1,118 +1,127 @@
 import os
-import json
+import google.generativeai as genai
 import numpy as np
-import faiss
-from optimum.onnxruntime import ORTModelForFeatureExtraction
-from transformers import AutoTokenizer
 
-# Using quantized MiniLM (~20MB)
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "Xenova/all-MiniLM-L6-v2")
-model = None
-tokenizer = None
-index = None
+# Configure Gemini
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+
+# In-memory storage suitable for < 1000 docs (Extremely fast & light)
 documents = []
+document_embeddings = None
 
-def initialize_rag():
-    global model, tokenizer, index, documents
-    print("Loading embedding model (ONNX)...")
-    
-    tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL_NAME)
-    model = ORTModelForFeatureExtraction.from_pretrained(EMBEDDING_MODEL_NAME, file_name="model_quantized.onnx")
-    
-    # Initialize FAISS index
-    embedding_dim = 384
-    index = faiss.IndexFlatL2(embedding_dim)
-    print("RAG Pipeline Initialized.")
-
-import data_loader
-
-def preprocess_data(data):
+def preprocess_data(data_items):
     """
-    Convert raw session/topic data into text documents.
-    Also loads custom data from 'data/' directory.
+    Load and preprocess data from the data/ directory and input items.
     """
-    processed_docs = []
+    global documents
+    documents = []
     
-    # 1. Load static knowledge base (Legacy)
-    try:
-        if os.path.exists('knowledge_base.json'):
-            with open('knowledge_base.json', 'r') as f:
-                kb = json.load(f)
-                for item in kb:
-                    processed_docs.append(f"General Knowledge ({item['category']}): {item['content']}")
-    except Exception as e:
-        print(f"Warning: Could not load knowledge_base.json: {e}")
-        
-    # 2. Load custom data via Data Loader
-    custom_docs = data_loader.load_all_data()
-    processed_docs.extend(custom_docs)
-    print(f"Total documents loaded: {len(processed_docs)}")
+    # Load built-in data
+    # Safe check for data loader existence, or just read directory
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    if os.path.exists(data_dir):
+        for f in os.listdir(data_dir):
+            if f.endswith(".txt"):
+                try:
+                    with open(os.path.join(data_dir, f), "r", encoding="utf-8") as file:
+                        content = file.read()
+                        # Simple chunking by paragraph
+                        chunks = [c.strip() for c in content.split('\n\n') if c.strip()]
+                        documents.extend(chunks)
+                except Exception as e:
+                    print(f"Error reading {f}: {e}")
 
-    # 3. Load dynamic User Data
-    for item in data:
-        # Handle Session Data
-        if 'duration' in item and 'notes' in item:
-            text = f"Session on {item.get('date', 'Unknown Date')}: Studied for {item.get('duration')} minutes. Notes: {item.get('notes')}"
-            processed_docs.append(text)
-        # Handle Topic Data
-        elif 'title' in item and 'status' in item:
-            text = f"Topic: {item.get('title')} ({item.get('category')}). Status: {item.get('status')}. Goal: {item.get('goal', 'No goal set')}"
-            processed_docs.append(text)
+    # Add user data items (Topics/Sessions converted to text)
+    if data_items:
+        for item in data_items:
+            # Flexible handling of dict items
+            text = str(item)
+            if isinstance(item, dict):
+                # Format nicely if it's a known structure
+                if 'title' in item: # Topic
+                    text = f"Topic: {item.get('title')} ({item.get('category')}). Goal: {item.get('goal')}"
+                elif 'date' in item: # Session
+                    text = f"Session on {item.get('date')} ({item.get('duration')} min): {item.get('notes')}"
             
-    return processed_docs
+            documents.append(text)
+            
+    return documents
 
-def get_embeddings(texts):
-    global model, tokenizer
-    if not texts:
-        return []
+def build_index(docs):
+    """
+    Generate embeddings for all documents using Gemini.
+    """
+    global document_embeddings, documents
+    
+    # Update documents list if provided
+    if docs is not None:
+        documents = docs
         
-    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
-    outputs = model(**inputs)
-    # Mean pooling
-    token_embeddings = outputs.last_hidden_state
-    attention_mask = inputs.attention_mask
-    
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-    
-    return embeddings.detach().numpy()
-
-# Need torch for the pooling logic above if we do it manually, 
-# OR use a library helper. To imply dependency, let's keep it simple.
-# Actually optimum outputs torch tensors usually.
-import torch 
-
-def build_index(raw_data):
-    global index, documents
-    
-    new_docs = preprocess_data(raw_data)
-    if not new_docs:
+    if not documents:
+        print("No documents to index.")
         return 0
         
-    documents = new_docs
-    embeddings = get_embeddings(new_docs)
+    print(f"Indexing {len(documents)} documents with Gemini...")
     
-    # Reset index and add new embeddings
-    embedding_dim = 384
-    index = faiss.IndexFlatL2(embedding_dim)
-    index.add(np.array(embeddings).astype('float32'))
-    
-    return len(documents)
+    try:
+        # Batch embedding (Gemini supports batching)
+        # embedding-001 is the model
+        result = genai.embed_content(
+            model="models/embedding-001",
+            content=documents,
+            task_type="retrieval_document",
+            title="NeuroTrack Knowledge"
+        )
+        
+        # 'embedding' key maps to list of embeddings
+        document_embeddings = np.array(result['embedding'])
+        print("Indexing complete.")
+        return len(documents)
+        
+    except Exception as e:
+        print(f"Embedding Error: {e}")
+        return 0
 
 def retrieve(query, k=3):
-    global index, documents
+    """
+    Retrieve top k documents using Cosine Similarity.
+    """
+    global document_embeddings, documents
     
-    if index is None or index.ntotal == 0:
+    if not documents or document_embeddings is None:
         return []
         
-    query_embedding = get_embeddings([query])
-    D, I = index.search(np.array(query_embedding).astype('float32'), k)
-    
-    retrieved_docs = []
-    for idx in I[0]:
-        if 0 <= idx < len(documents):
-            retrieved_docs.append(documents[idx])
+    try:
+        # Embed the query
+        query_result = genai.embed_content(
+            model="models/embedding-001",
+            content=query,
+            task_type="retrieval_query"
+        )
+        query_embedding = np.array(query_result['embedding'])
+        
+        # Calculate Cosine Similarity
+        # Dot product of normalized vectors (assuming Gemini output is not normalized, we strictly use dot for simplicity)
+        # For robustness, we normalize.
+        
+        # Compute norms
+        doc_norms = np.linalg.norm(document_embeddings, axis=1)
+        query_norm = np.linalg.norm(query_embedding)
+        
+        # Avoid division by zero
+        if query_norm == 0 or np.any(doc_norms == 0):
+            return []
             
-    return retrieved_docs
-
-initialize_rag()
+        scores = np.dot(document_embeddings, query_embedding) / (doc_norms * query_norm)
+        
+        # Get top k indices
+        top_k_indices = np.argsort(scores)[-k:][::-1]
+        
+        results = [documents[i] for i in top_k_indices]
+        return results
+        
+    except Exception as e:
+        print(f"Retrieval Error: {e}")
+        return []
