@@ -1,79 +1,83 @@
 import os
-from optimum.onnxruntime import ORTModelForSeq2SeqLM
-from transformers import AutoTokenizer
+import google.generativeai as genai
 
-# Using LaMini-Flan-T5-77M for ultra-low memory footprint (Int8 Quantized)
-# Roughly 80MB model size.
-GENERATOR_MODEL_NAME = os.getenv("GENERATOR_MODEL", "Xenova/LaMini-Flan-T5-77M")
+# Configure Gemini
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+
+GENERATOR_MODEL_NAME = "gemini-pro"
 model = None
-tokenizer = None
 
 def initialize_generator():
-    global model, tokenizer
-    print(f"Loading generator model (ONNX): {GENERATOR_MODEL_NAME}...")
-    
-    # Load quantized model for efficiency
-    tokenizer = AutoTokenizer.from_pretrained(GENERATOR_MODEL_NAME)
-    model = ORTModelForSeq2SeqLM.from_pretrained(GENERATOR_MODEL_NAME)
-    
+    global model
+    print(f"Loading generator model: {GENERATOR_MODEL_NAME}...")
+    model = genai.GenerativeModel(GENERATOR_MODEL_NAME)
     print("Generator Initialized.")
 
 def generate_chat_response(message, history, context=""):
     """
-    Generate a conversational response using history and context.
+    Generate a conversational response using chat history and context.
     """
-    # 0. Basic Greetings Bypass (Fast response)
-    greetings = ["hi", "hello", "hey", "greetings", "good morning", "good evening"]
+    # 0. Basic Greetings Bypass
+    greetings = ["hi", "hello", "hey", "greetings", "good morning"]
     if message.lower().strip() in greetings:
         return "Hello! I am your NeuroTrack AI Assistant. How can I help you optimize your learning today?"
 
-    # Simple history formatting
-    history_text = ""
-    for msg in history[-2:]: # minimal history
-        history_text += f"{msg['role']}: {msg['content']}\n"
+    global model
+    if model is None:
+        initialize_generator()
+
+    try:
+        # Construct a rich prompt with context
+        system_instruction = f"""
+You are an expert AI Study Assistant for NeuroTrack.
+Use the following Context to answer the user's question.
+If the answer is not in the context, use your general knowledge but mention that it's general advice.
+
+Context:
+{context}
+"""
+        # Convert history format if needed, or just append to prompt
+        # Gemini supports chat history objects, but for simplicity/statelessness we can append
         
-    prompt = f"""
-    Answer the user question based on the context.
-    Context: {context[:300]}
-    
-    User: {message}
-    Answer:
-    """
-    
-    return generate_text(prompt, max_length=150)
+        full_prompt = f"{system_instruction}\n\nUser: {message}"
+        
+        response = model.generate_content(full_prompt)
+        return response.text
+    except Exception as e:
+        return f"I encountered an error: {str(e)}"
 
 def generate_study_plan(topics, goals, hours_per_week):
+    global model
+    if model is None:
+        initialize_generator()
+        
     prompt = f"""
-    Create a weekly study plan.
+    Create a personalized weekly study plan.
     Topics: {', '.join(topics)}
     Goals: {goals}
-    Time: {hours_per_week} hours/week
+    Available Time: {hours_per_week} hours/week
     
-    Plan:
+    Format the output as a clear Weekly Schedule with daily activities.
     """
-    return generate_text(prompt, max_length=200)
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Error generating plan: {str(e)}"
 
-def generate_text(prompt, max_length=150):
-    global model, tokenizer
+def generate_text(prompt, max_length=200):
+    global model
     if model is None:
         initialize_generator()
         
     try:
-        inputs = tokenizer(prompt, return_tensors="pt")
-        # Generate with aggressive optimization parameters
-        gen_tokens = model.generate(
-            **inputs, 
-            max_new_tokens=max_length,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9
-        )
-        response = tokenizer.batch_decode(gen_tokens, skip_special_tokens=True)[0]
-        return response
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
-        print(f"Generation Error: {e}")
-        return "Error generating response."
+        return f"Error: {str(e)}"
 
 def construct_prompt(query, context_docs):
-    context_str = " ".join(context_docs)
-    return f"Context: {context_str}\nQuestion: {query}\nAnswer:"
+    context_str = "\n".join(context_docs)
+    return f"Context:\n{context_str}\n\nQuestion: {query}\nAnswer:"
