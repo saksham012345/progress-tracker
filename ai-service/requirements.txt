@@ -1,8 +1,6 @@
 fastapi
 uvicorn
-optimum[onnxruntime]
-transformers
-torch --index-url https://download.pytorch.org/whl/cpu
+google-generativeai
 numpy
+python-dotenv
 requests
-faiss-cpu
