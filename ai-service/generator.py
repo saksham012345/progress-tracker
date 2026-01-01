@@ -34,8 +34,8 @@ def initialize_generator():
             print(f"Failed to load {model_name}: {e}")
             
     # Absolute fallback if everything fails
-    print("CRITICAL: Could not load any Gemeni models. Service may fail.")
-    model = genai.GenerativeModel("gemini-pro") # Final hail mary
+    print("CRITICAL: Could not load normal candidates. Using gemini-1.5-flash as final fallback.")
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
 def generate_chat_response(message, history, context=""):
     """
