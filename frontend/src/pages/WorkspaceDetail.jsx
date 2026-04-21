@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { SocketContext } from '../context/SocketContext';
 import { API_URL } from '../config';
-import { Send, Users, ArrowLeft, Loader2, Sparkles, MessageSquare, Book, Database, PlayCircle } from 'lucide-react';
+import { Send, Users, ArrowLeft, Loader2, Sparkles, MessageSquare, Book, Database, PlayCircle, UserPlus, Search, X, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SharedNotes from '../components/SharedNotes';
 import KnowledgeHub from '../components/KnowledgeHub';
@@ -19,6 +19,14 @@ const WorkspaceDetail = () => {
     const [activeTab, setActiveTab] = useState('chat');
     const [studyingUsers, setStudyingUsers] = useState([]);
     const scrollRef = useRef();
+
+    // Member invite state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [searching, setSearching] = useState(false);
+    const [addingUser, setAddingUser] = useState(null);
+    const [addedUsers, setAddedUsers] = useState([]);
+    const searchTimeout = useRef();
 
     useEffect(() => {
         fetchWorkspaceData();
@@ -94,6 +102,65 @@ const WorkspaceDetail = () => {
         setNewMessage('');
     };
 
+    // User search for adding members
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+
+        if (query.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setSearching(true);
+        searchTimeout.current = setTimeout(async () => {
+            try {
+                const res = await fetch(`${API_URL}/api/auth/search?q=${encodeURIComponent(query)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    // Filter out users already in workspace
+                    const memberIds = workspace?.members?.map(m => typeof m === 'string' ? m : m._id) || [];
+                    const filtered = data.filter(u => !memberIds.includes(u._id));
+                    setSearchResults(filtered);
+                }
+            } catch (err) {
+                console.error('Search Error:', err);
+            } finally {
+                setSearching(false);
+            }
+        }, 400);
+    };
+
+    const handleAddMember = async (userId) => {
+        setAddingUser(userId);
+        try {
+            const res = await fetch(`${API_URL}/api/workspaces/${id}/members`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ userId })
+            });
+            if (res.ok) {
+                setAddedUsers(prev => [...prev, userId]);
+                // Remove from search results
+                setSearchResults(prev => prev.filter(u => u._id !== userId));
+                // Refresh workspace data
+                fetchWorkspaceData();
+                setTimeout(() => setAddedUsers(prev => prev.filter(id => id !== userId)), 2000);
+            }
+        } catch (err) {
+            console.error('Add Member Error:', err);
+        } finally {
+            setAddingUser(null);
+        }
+    };
+
+    const isOwner = workspace?.owner?._id === (user.id || user._id) || workspace?.owner === (user.id || user._id);
+
     if (loading) return <div style={{ textAlign: 'center', padding: '5rem' }}>Loading Workspace...</div>;
     if (!workspace) return <div style={{ textAlign: 'center', padding: '5rem' }}>Workspace not found.</div>;
 
@@ -129,7 +196,8 @@ const WorkspaceDetail = () => {
                 {[
                     { id: 'chat', label: 'Chat', icon: <MessageSquare size={16} /> },
                     { id: 'notes', label: 'Shared Notes', icon: <Book size={16} /> },
-                    { id: 'knowledge', label: 'Knowledge Hub', icon: <Database size={16} /> }
+                    { id: 'knowledge', label: 'Knowledge Hub', icon: <Database size={16} /> },
+                    { id: 'members', label: 'Members', icon: <Users size={16} /> }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -261,6 +329,213 @@ const WorkspaceDetail = () => {
                             style={{ height: '100%' }}
                         >
                             <KnowledgeHub workspaceId={id} token={token} />
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'members' && (
+                        <motion.div
+                            key="members"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            style={{ height: '100%', overflowY: 'auto' }}
+                        >
+                            <div style={{ display: 'grid', gridTemplateColumns: isOwner ? '1fr 1fr' : '1fr', gap: '2rem', maxWidth: '900px' }}>
+                                {/* Current Members */}
+                                <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '20px' }}>
+                                    <h3 style={{ margin: '0 0 1.5rem', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Users size={20} color="var(--accent)" /> Current Members
+                                    </h3>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                        {/* Owner */}
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', gap: '1rem',
+                                            padding: '1rem', borderRadius: '14px',
+                                            background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05))',
+                                            border: '1px solid rgba(168,85,247,0.2)'
+                                        }}>
+                                            <div style={{
+                                                width: '44px', height: '44px', borderRadius: '50%',
+                                                background: 'linear-gradient(135deg, var(--accent), #a855f7)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: 'white', fontWeight: 800, fontSize: '1.1rem'
+                                            }}>
+                                                {(workspace.owner?.username || 'O')[0].toUpperCase()}
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem' }}>
+                                                    {workspace.owner?.username || 'Owner'}
+                                                </p>
+                                                <span style={{
+                                                    fontSize: '0.7rem', padding: '2px 8px', borderRadius: '20px',
+                                                    background: 'rgba(168,85,247,0.2)', color: '#c084fc',
+                                                    fontWeight: 600, letterSpacing: '0.5px'
+                                                }}>
+                                                    OWNER
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Other Members */}
+                                        {workspace.members?.filter(m => {
+                                            const mId = typeof m === 'string' ? m : m._id;
+                                            const ownerId = typeof workspace.owner === 'string' ? workspace.owner : workspace.owner?._id;
+                                            return mId !== ownerId;
+                                        }).map((member, idx) => {
+                                            const memberName = typeof member === 'string' ? `Member ${idx + 1}` : member.username || `Member ${idx + 1}`;
+                                            return (
+                                                <motion.div
+                                                    key={typeof member === 'string' ? member : member._id}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: idx * 0.05 }}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: '1rem',
+                                                        padding: '0.8rem 1rem', borderRadius: '14px',
+                                                        background: 'rgba(255,255,255,0.03)',
+                                                        border: '1px solid rgba(255,255,255,0.05)'
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        width: '40px', height: '40px', borderRadius: '50%',
+                                                        background: 'rgba(255,255,255,0.1)',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: 'white', fontWeight: 700
+                                                    }}>
+                                                        {memberName[0].toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{memberName}</p>
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Member</span>
+                                                    </div>
+                                                </motion.div>
+                                            );
+                                        })}
+
+                                        {workspace.members?.length <= 1 && (
+                                            <div style={{ textAlign: 'center', padding: '2rem 1rem', opacity: 0.4 }}>
+                                                <UserPlus size={32} style={{ marginBottom: '0.5rem' }} />
+                                                <p style={{ margin: 0, fontSize: '0.85rem' }}>No other members yet</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Add Members (only for owner) */}
+                                {isOwner && (
+                                    <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '20px' }}>
+                                        <h3 style={{ margin: '0 0 1.5rem', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <UserPlus size={20} color="var(--accent)" /> Invite Members
+                                        </h3>
+
+                                        {/* Search Input */}
+                                        <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+                                            <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                                            <input
+                                                type="text"
+                                                placeholder="Search by username..."
+                                                value={searchQuery}
+                                                onChange={(e) => handleSearch(e.target.value)}
+                                                style={{
+                                                    width: '100%', padding: '0.9rem 1rem 0.9rem 3rem',
+                                                    borderRadius: '12px', border: '1px solid var(--border)',
+                                                    background: 'rgba(0,0,0,0.2)', color: 'white',
+                                                    outline: 'none', fontSize: '0.95rem',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                            />
+                                            {searchQuery && (
+                                                <button
+                                                    onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                                                    style={{
+                                                        position: 'absolute', right: '0.8rem', top: '50%',
+                                                        transform: 'translateY(-50%)', background: 'none',
+                                                        border: 'none', color: 'var(--text-secondary)', cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Search Results */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                            {searching && (
+                                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)' }}>
+                                                    <Loader2 size={20} className="spin" style={{ marginBottom: '0.3rem' }} />
+                                                    <p style={{ margin: 0, fontSize: '0.85rem' }}>Searching...</p>
+                                                </div>
+                                            )}
+
+                                            {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
+                                                <div style={{ textAlign: 'center', padding: '2rem 1rem', opacity: 0.5 }}>
+                                                    <p style={{ margin: 0, fontSize: '0.85rem' }}>No users found matching "{searchQuery}"</p>
+                                                </div>
+                                            )}
+
+                                            <AnimatePresence>
+                                                {searchResults.map(u => (
+                                                    <motion.div
+                                                        key={u._id}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -10 }}
+                                                        style={{
+                                                            display: 'flex', alignItems: 'center', gap: '1rem',
+                                                            padding: '0.8rem 1rem', borderRadius: '14px',
+                                                            background: 'rgba(255,255,255,0.03)',
+                                                            border: '1px solid rgba(255,255,255,0.05)',
+                                                            transition: 'border 0.2s'
+                                                        }}
+                                                    >
+                                                        <div style={{
+                                                            width: '40px', height: '40px', borderRadius: '50%',
+                                                            background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: 'white', fontWeight: 700
+                                                        }}>
+                                                            {u.username[0].toUpperCase()}
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{u.username}</p>
+                                                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{u.email}</p>
+                                                        </div>
+                                                        <motion.button
+                                                            whileHover={{ scale: 1.05 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                            onClick={() => handleAddMember(u._id)}
+                                                            disabled={addingUser === u._id || addedUsers.includes(u._id)}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                                                padding: '0.5rem 1rem', borderRadius: '10px',
+                                                                background: addedUsers.includes(u._id) ? 'var(--success)' : 'var(--accent)',
+                                                                color: 'white', border: 'none', fontWeight: 600,
+                                                                fontSize: '0.8rem', cursor: addingUser === u._id ? 'not-allowed' : 'pointer',
+                                                                opacity: addingUser === u._id ? 0.7 : 1
+                                                            }}
+                                                        >
+                                                            {addedUsers.includes(u._id) ? (
+                                                                <><CheckCircle size={14} /> Added</>
+                                                            ) : addingUser === u._id ? (
+                                                                <><Loader2 size={14} className="spin" /> Adding...</>
+                                                            ) : (
+                                                                <><UserPlus size={14} /> Add</>
+                                                            )}
+                                                        </motion.button>
+                                                    </motion.div>
+                                                ))}
+                                            </AnimatePresence>
+
+                                            {!searchQuery && (
+                                                <div style={{ textAlign: 'center', padding: '2rem 1rem', opacity: 0.3 }}>
+                                                    <Search size={32} style={{ marginBottom: '0.5rem' }} />
+                                                    <p style={{ margin: 0, fontSize: '0.85rem' }}>Search for users to invite to this workspace</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>

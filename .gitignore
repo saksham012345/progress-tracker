@@ -1,7 +1,10 @@
 # Environment Files (Secrets)
 .env
+.env.local
+.env.production
 backend/.env
 frontend/.env
+ai-service/.env
 .DS_Store
 
 # Python
@@ -14,14 +17,22 @@ env/
 ai-service/embeddings/
 ai-service/vector_store/
 ai-service/__pycache__/
+*.egg-info/
 
 # Node
 node_modules/
 dist/
 build/
 .output/
+package-lock.json
 
 # Logs & OS
 *.log
+npm-debug.log*
 .vscode/
 .idea/
+Thumbs.db
+
+# Test & Verification scripts (not needed in production)
+verify_*.py
+test_*.py
