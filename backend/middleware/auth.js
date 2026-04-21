@@ -13,7 +13,7 @@ const auth = (req, res, next) => {
             process.env.JWT_SECRET || 'fallback_secret_do_not_use_in_prod'
         );
 
-        req.user = verified.id;
+        req.user = { id: verified.id };
         next();
     } catch (err) {
         res.status(401).json({ msg: 'Token is not valid' });

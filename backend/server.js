@@ -12,6 +12,8 @@ const PORT = process.env.PORT || 5000;
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const http = require('http');
+const { Server } = require('socket.io');
 
 // Middleware
 app.use(helmet()); // Security Headers
@@ -20,7 +22,7 @@ app.use(compression()); // Gzip Compression
 // Rate Limiting (Limit each IP to 100 requests per 15 minutes)
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 500,
     message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api', limiter);
@@ -39,7 +41,7 @@ app.use(morgan('dev')); // Request logging
 app.get('/', (req, res) => {
     res.json({
         status: 'online',
-        message: 'NeuroTrack Backend is running',
+        message: 'HyperActive Backend is running',
         dbStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
     });
 });
@@ -71,6 +73,58 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Server is running' });
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: process.env.FRONTEND_URL || '*',
+        methods: ["GET", "POST"]
+    }
+});
+
+// Socket.io Logic
+io.on('connection', (socket) => {
+    console.log('👤 A user connected:', socket.id);
+
+    socket.on('joinWorkspace', (workspaceId) => {
+        socket.join(workspaceId);
+        console.log(`📂 User joined workspace: ${workspaceId}`);
+    });
+
+    socket.on('sendMessage', async (data) => {
+        // data: { workspaceId, senderId, senderName, text }
+        try {
+            const Message = require('./models/Message');
+            const newMessage = new Message(data);
+            await newMessage.save();
+            
+            // Broadcast to the workspace
+            io.to(data.workspaceId).emit('receiveMessage', newMessage);
+        } catch (err) {
+            console.error('❌ Socket Error:', err.message);
+        }
+    });
+
+    socket.on('startStudy', (data) => {
+        // data: { workspaceId, userId, username, topicTitle }
+        socket.to(data.workspaceId).emit('userStartedStudy', data);
+        console.log(`📖 ${data.username} started studying in ${data.workspaceId}`);
+    });
+
+    socket.on('stopStudy', (data) => {
+        // data: { workspaceId, userId }
+        socket.to(data.workspaceId).emit('userStoppedStudy', data);
+    });
+
+    socket.on('noteUpdate', (data) => {
+        // data: { workspaceId, noteId, content, updatedBy }
+        socket.to(data.workspaceId).emit('receiveNoteUpdate', data);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('🔌 User disconnected');
+    });
+});
+
+server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });

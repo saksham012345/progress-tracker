@@ -1,4 +1,4 @@
-# NeuroTrack - Learning Progress Tracker
+# HyperActive - Learning Progress Tracker
 
 Manage your learning journey with AI-powered insights. Track topics, log sessions, and get feedback on your notes.
 

@@ -11,6 +11,31 @@ if api_key:
 documents = []
 document_embeddings = None
 
+import requests
+
+def get_provider():
+    if os.getenv("AI_PROVIDER") == "ollama":
+        return "ollama"
+    if os.getenv("GEMINI_API_KEY"):
+        return "gemini"
+    return "ollama"
+
+def call_ollama_embedding(text):
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+    url = f"{base_url}/api/embeddings"
+    try:
+        response = requests.post(url, json={
+            "model": model,
+            "prompt": text
+        }, timeout=30)
+        if response.status_code == 200:
+            return response.json().get('embedding', [])
+        else:
+            return [0.0] * 768 # Fallback
+    except:
+        return [0.0] * 768
+
 def preprocess_data(data_items):
     """
     Load and preprocess data from the data/ directory and input items.
@@ -68,8 +93,18 @@ def build_index(docs):
         print("No documents to index.")
         return 0
         
-    print(f"Indexing {len(documents)} documents with Gemini V1...")
-    
+    if get_provider() == "ollama":
+        print("Indexing documents with Ollama embeddings...")
+        all_embeddings = []
+        for d in documents:
+            emb = call_ollama_embedding(d)
+            all_embeddings.append(emb)
+        
+        document_embeddings = np.array(all_embeddings)
+        print("Ollama indexing complete.")
+        return len(documents)
+
+    # Gemini Indexing Logic
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("Error: No API Key found.")
@@ -102,7 +137,7 @@ def build_index(docs):
                 "model": "models/embedding-001",
                 "content": {"parts": [{"text": d}]},
                 "taskType": "RETRIEVAL_DOCUMENT",
-                "title": "NeuroTrack Knowledge"
+                "title": "HyperActive Knowledge"
             } for d in batch_docs]
         }
         
@@ -167,37 +202,42 @@ def retrieve(query, k=3):
     
     if not documents or document_embeddings is None:
         return []
-        
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return []
 
     try:
-        # Embed query
-        url = "https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent"
-        payload = {
-            "model": "models/embedding-001",
-            "content": {"parts": [{"text": query}]},
-            "taskType": "RETRIEVAL_QUERY"
-        }
-        
-        response = requests.post(
-            url, 
-            headers={"Content-Type": "application/json"},
-            params={"key": api_key},
-            json=payload,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            print(f"Retrieval embedding error: {response.text}")
-            return []
+        if get_provider() == "ollama":
+            query_embedding = np.array(call_ollama_embedding(query))
+        else:
+            # Gemini path requires API key
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                print("Retrieval skipped: No GEMINI_API_KEY and provider is not ollama.")
+                return []
             
-        data = response.json()
-        if 'embedding' not in data or 'values' not in data['embedding']:
-             return []
-             
-        query_embedding = np.array(data['embedding']['values'])
+            # Embed query with Gemini
+            url = "https://generativelanguage.googleapis.com/v1/models/embedding-001:embedContent"
+            payload = {
+                "model": "models/embedding-001",
+                "content": {"parts": [{"text": query}]},
+                "taskType": "RETRIEVAL_QUERY"
+            }
+            
+            response = requests.post(
+                url, 
+                headers={"Content-Type": "application/json"},
+                params={"key": api_key},
+                json=payload,
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                print(f"Retrieval embedding error: {response.text}")
+                return []
+                
+            data = response.json()
+            if 'embedding' not in data or 'values' not in data['embedding']:
+                 return []
+                 
+            query_embedding = np.array(data['embedding']['values'])
         
         # Calculate Cosine Similarity
         doc_norms = np.linalg.norm(document_embeddings, axis=1)

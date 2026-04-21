@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Trash2, BrainCircuit } from 'lucide-react';
+import { ArrowLeft, Trash2, BrainCircuit, Play, StopCircle } from 'lucide-react';
 import SessionLog from '../components/SessionLog';
 import { API_URL } from '../config';
+import { AuthContext } from '../context/AuthContext';
+import { SocketContext } from '../context/SocketContext';
 
 const TopicDetail = () => {
     const { id } = useParams();
@@ -13,6 +15,9 @@ const TopicDetail = () => {
     const [loading, setLoading] = useState(true);
     const [aiSummary, setAiSummary] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
+    const { user } = React.useContext(AuthContext);
+    const { socket } = React.useContext(SocketContext);
+    const [isStudying, setIsStudying] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -39,6 +44,24 @@ const TopicDetail = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (isStudying && socket && topic?.workspaceId) {
+            socket.emit('startStudy', {
+                workspaceId: topic.workspaceId,
+                userId: user.id || user._id,
+                username: user.username,
+                topicTitle: topic.title
+            });
+
+            return () => {
+                socket.emit('stopStudy', {
+                    workspaceId: topic.workspaceId,
+                    userId: user.id || user._id
+                });
+            };
+        }
+    }, [isStudying, topic, socket, user]);
 
     const handleDelete = async () => {
         if (!window.confirm('Are you sure you want to delete this topic?')) return;
@@ -153,6 +176,17 @@ const TopicDetail = () => {
                             <option value="In Progress">In Progress</option>
                             <option value="Revised">Revised</option>
                         </select>
+                        <button
+                            onClick={() => setIsStudying(!isStudying)}
+                            style={{
+                                background: isStudying ? 'var(--danger)' : 'var(--success)',
+                                color: 'white', border: 'none', padding: '0.5rem 1.5rem',
+                                borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                fontWeight: 700, cursor: 'pointer'
+                            }}
+                        >
+                            {isStudying ? <><StopCircle size={18}/> Stop Study</> : <><Play size={18}/> Study Now</>}
+                        </button>
                         <button
                             onClick={handleDelete}
                             style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: 'none', padding: '0.5rem', borderRadius: '8px' }}

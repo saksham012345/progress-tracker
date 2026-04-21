@@ -50,7 +50,7 @@ def test_rag_flow():
         return False
 
 def main():
-    print("=== NeuroTrack System Verification ===\n")
+    print("=== HyperActive System Verification ===\n")
     
     frontend = check_service("Frontend", "http://localhost:5173")
     backend = check_service("Backend", "http://localhost:5000")

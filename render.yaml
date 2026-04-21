@@ -1,7 +1,7 @@
 services:
   # Backend Service (Node.js)
   - type: web
-    name: neurotrack-backend
+    name: hyperactive-backend
     env: node
     plan: free
     rootDir: backend
@@ -13,12 +13,12 @@ services:
       - key: AI_SERVICE_URL
         fromService:
           type: web
-          name: neurotrack-ai
+          name: hyperactive-ai
           property: host
 
   # AI Service (Python)
   - type: web
-    name: neurotrack-ai
+    name: hyperactive-ai
     env: python
     plan: free
     rootDir: ai-service

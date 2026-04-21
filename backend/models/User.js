@@ -24,7 +24,28 @@ const userSchema = new mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now
-    }
+    },
+    // Gamification fields
+    points: {
+        type: Number,
+        default: 0
+    },
+    level: {
+        type: Number,
+        default: 1
+    },
+    streak: {
+        type: Number,
+        default: 0
+    },
+    lastActivityDate: {
+        type: Date
+    },
+    badges: [{
+        name: String,
+        icon: String,
+        earnedAt: { type: Date, default: Date.now }
+    }]
 });
 
 module.exports = mongoose.model('User', userSchema);

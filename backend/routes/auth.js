@@ -86,14 +86,67 @@ router.post('/login', async (req, res) => {
             { expiresIn: '7d' }
         );
 
+        // Update Streak and points on login
+        const now = new Date();
+        const yesterday = new Date();
+        yesterday.setDate(now.getDate() - 1);
+
+        if (user.lastActivityDate) {
+            const lastDate = new Date(user.lastActivityDate);
+            // If last activity was yesterday, increment streak
+            if (lastDate.toDateString() === yesterday.toDateString()) {
+                user.streak += 1;
+            } else if (lastDate.toDateString() !== now.toDateString()) {
+                // If skipped a day, reset streak (but keep today if it's a new day)
+                user.streak = 1;
+            }
+        } else {
+            user.streak = 1;
+        }
+
+        user.lastActivityDate = now;
+        user.points += 10; // 10 points for daily login
+        // Check for level up
+        user.level = Math.floor(user.points / 200) + 1;
+        await user.save();
+
         res.json({
             token,
             user: {
                 id: user._id,
                 username: user.username,
-                email: user.email
+                email: user.email,
+                points: user.points,
+                level: user.level,
+                streak: user.streak
             }
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get Current User Profile (Stats)
+router.get('/me', require('../middleware/auth'), async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password');
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Search Users (for adding to workspaces)
+router.get('/search', require('../middleware/auth'), async (req, res) => {
+    try {
+        const query = req.query.q;
+        if (!query || query.length < 2) {
+            return res.json([]);
+        }
+        const users = await User.find({
+            _id: { $ne: req.user.id }, // Exclude self
+            username: { $regex: query, $options: 'i' }
+        }).select('_id username email').limit(10);
+        res.json(users);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

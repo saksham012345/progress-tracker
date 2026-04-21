@@ -1,7 +1,8 @@
 const axios = require('axios');
 const Topic = require('../models/Topic');
-// We need sessions too to pass to RAG
 const Session = require('../models/Session');
+const Note = require('../models/Note');
+const Resource = require('../models/Resource');
 
 let AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
@@ -24,10 +25,21 @@ exports.summarizeProgress = async (req, res) => {
         const sessions = await Session.find({});
 
         const userQuery = req.body.query || "Summarize my progress";
+        const workspaceId = req.body.workspaceId;
+
+        let notes = [];
+        let resources = [];
+        
+        if (workspaceId) {
+            notes = await Note.find({ workspaceId });
+            resources = await Resource.find({ workspaceId });
+        }
 
         const response = await aiClient.post('/rag/analyze', {
             topics,
             sessions,
+            notes,
+            resources,
             query: userQuery
         });
 
@@ -66,12 +78,21 @@ exports.improveNotes = async (req, res) => {
 
 exports.chat = async (req, res) => {
     try {
-        const { message, history } = req.body;
+        const { message, history, workspaceId } = req.body;
+
+        let notes = [];
+        let resources = [];
+        if (workspaceId) {
+            notes = await Note.find({ workspaceId });
+            resources = await Resource.find({ workspaceId });
+        }
 
         // Pass history to Python service for context
         const response = await aiClient.post('/rag/chat', {
             message,
-            history: history || []
+            history: history || [],
+            notes,
+            resources
         });
 
         res.json(response.data);
@@ -114,6 +135,24 @@ exports.generateStudyPlan = async (req, res) => {
                 error: err.message
             });
         }
+    }
+};
+
+exports.decomposeTask = async (req, res) => {
+    try {
+        const { task, context } = req.body;
+        if (!task) {
+            return res.status(400).json({ message: "Task is required" });
+        }
+
+        const response = await aiClient.post('/rag/decompose', {
+            task,
+            context: context || ""
+        });
+
+        res.json(response.data);
+    } catch (err) {
+        handleAiError(res, err);
     }
 };
 

@@ -158,3 +158,39 @@ button {
     border-radius: 16px;
   }
 }
+
+.pulse {
+    animation: pulse-sm 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-sm {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .5; transform: scale(0.9); }
+}
+
+.gloss-effect {
+    position: relative;
+    overflow: hidden;
+}
+
+.gloss-effect::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(255, 255, 255, 0.05),
+        transparent
+    );
+    transform: rotate(45deg);
+    transition: 0.5s;
+}
+
+.gloss-effect:hover::after {
+    left: 100%;
+    top: 100%;
+}

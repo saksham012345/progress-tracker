@@ -2,10 +2,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 import rag_pipeline
 import generator
 
-app = FastAPI(title="NeuroTrack AI Service")
+app = FastAPI(title="HyperActive AI Service")
 
 # Pydantic Models
 class SessionData(BaseModel):
@@ -37,6 +43,10 @@ class StudyPlanRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[dict] = []
+
+class DecomposeRequest(BaseModel):
+    task: str
+    context: Optional[str] = ""
 
 import threading
 
@@ -132,6 +142,12 @@ async def generate_study_plan(request: StudyPlanRequest):
     final_plan = plan.split("Weekly Schedule:")[-1].strip() if "Weekly Schedule:" in plan else plan
     
     return {"plan": final_plan}
+
+@app.post("/rag/decompose")
+async def decompose_task(request: DecomposeRequest):
+    sub_tasks = generator.generate_subtasks(request.task, request.context)
+    # Expected format: JSON list of strings from generator
+    return {"subTasks": sub_tasks}
 
 class ResourceRequest(BaseModel):
     category: str

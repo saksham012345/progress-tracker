@@ -3,7 +3,8 @@ const Joi = require('joi');
 const topicSchema = Joi.object({
     title: Joi.string().min(3).required(),
     category: Joi.string().min(2).required(),
-    goal: Joi.string().allow('').optional()
+    goal: Joi.string().allow('').optional(),
+    deadline: Joi.date().allow('', null).optional()
 });
 
 const sessionSchema = Joi.object({
