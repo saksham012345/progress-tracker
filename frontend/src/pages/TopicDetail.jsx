@@ -265,3 +265,393 @@ const PomodoroTimer = ({ onSessionComplete }) => {
         </div>
     );
 };
+
+// ── AI Quiz ───────────────────────────────────────────────────────────────────
+const QuizMode = ({ topicId, token, onXpEarned }) => {
+    const [questions, setQuestions] = useState([]);
+    const [answers, setAnswers] = useState({});
+    const [results, setResults] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [currentQ, setCurrentQ] = useState(0);
+    const [error, setError] = useState(null);
+
+    const generateQuiz = async () => {
+        setLoading(true); setResults(null); setAnswers({}); setCurrentQ(0); setError(null);
+        try {
+            const res = await fetch(`${API_URL}/api/quiz/generate`, {
+                method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+                body: JSON.stringify({ topicId })
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.message || 'Failed'); return; }
+            if (!data.questions?.length) { setError(data.error || 'No questions. Add session notes first.'); return; }
+            setQuestions(data.questions);
+        } catch { setError('Could not reach AI service.'); }
+        finally { setLoading(false); }
+    };
+
+    const submitQuiz = async () => {
+        setSubmitting(true);
+        try {
+            const qs = questions.map((q,i) => ({ question:q.question, correctAnswer:q.correctAnswer, userAnswer:answers[i]||'' }));
+            const res = await fetch(`${API_URL}/api/quiz/submit`, {
+                method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+                body: JSON.stringify({ topicId, questions: qs })
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.message || 'Grading failed'); return; }
+            setResults(data);
+            if (data.xpEarned > 0) onXpEarned();
+        } catch { setError('Could not reach AI service.'); }
+        finally { setSubmitting(false); }
+    };
+
+    if (loading) return <div style={{ padding:'2rem' }}><AILoader label="Generating quiz questions..." /></div>;
+
+    if (results) return (
+        <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} style={{ padding:'1.5rem' }}>
+            <div style={{ textAlign:'center', marginBottom:'1.5rem' }}>
+                <Trophy size={40} color="#ffd700" style={{ marginBottom:'0.5rem' }} />
+                <h3 style={{ fontSize:'1.5rem', margin:0 }}>Score: {results.score}%</h3>
+                <p style={{ color:'var(--accent)', fontWeight:700, margin:'0.25rem 0 0' }}>+{results.xpEarned} XP earned!</p>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'1rem' }}>
+                {results.graded?.map((q,i) => (
+                    <div key={i} style={{ padding:'1rem', borderRadius:'12px', background: q.isCorrect ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border:`1px solid ${q.isCorrect ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+                        <div style={{ display:'flex', gap:'0.5rem', marginBottom:'0.4rem' }}>
+                            {q.isCorrect ? <CheckCircle size={16} color="var(--success)"/> : <XCircle size={16} color="#ef4444"/>}
+                            <span style={{ fontWeight:600, fontSize:'0.9rem' }}>{q.question}</span>
+                        </div>
+                        <p style={{ margin:0, fontSize:'0.8rem', color:'var(--text-secondary)' }}>Your answer: {q.userAnswer||'(blank)'}</p>
+                        {!q.isCorrect && <p style={{ margin:'0.25rem 0 0', fontSize:'0.8rem', color:'var(--success)' }}>Correct: {q.correctAnswer}</p>}
+                        {q.feedback && <p style={{ margin:'0.25rem 0 0', fontSize:'0.8rem', color:'var(--text-secondary)', fontStyle:'italic' }}>{q.feedback}</p>}
+                    </div>
+                ))}
+            </div>
+            <button onClick={generateQuiz} style={{ marginTop:'1.5rem', width:'100%', background:'var(--accent)', color:'white', border:'none', padding:'0.8rem', borderRadius:'10px', fontWeight:600, cursor:'pointer' }}>Try Again</button>
+        </motion.div>
+    );
+
+    if (error) return (
+        <div style={{ padding:'2rem', textAlign:'center' }}>
+            <p style={{ color:'#ef4444', marginBottom:'1rem' }}>{error}</p>
+            <button onClick={generateQuiz} style={{ background:'var(--accent)', color:'white', border:'none', padding:'0.7rem 1.5rem', borderRadius:'10px', fontWeight:600, cursor:'pointer' }}>Retry</button>
+        </div>
+    );
+
+    if (!questions.length) return (
+        <div style={{ textAlign:'center', padding:'3rem' }}>
+            <BrainCircuit size={48} color="var(--accent)" style={{ marginBottom:'1rem', opacity:0.7 }} />
+            <h3 style={{ marginBottom:'0.5rem' }}>AI Tutor Quiz</h3>
+            <p style={{ color:'var(--text-secondary)', marginBottom:'1.5rem', fontSize:'0.9rem' }}>Test your knowledge with AI-generated questions based on your notes.</p>
+            <button onClick={generateQuiz} style={{ background:'var(--accent)', color:'white', border:'none', padding:'0.8rem 2rem', borderRadius:'10px', fontWeight:600, cursor:'pointer' }}>Generate Quiz</button>
+        </div>
+    );
+
+    const q = questions[currentQ];
+    return (
+        <div style={{ padding:'1.5rem' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'1.5rem', fontSize:'0.85rem', color:'var(--text-secondary)' }}>
+                <span>Question {currentQ+1} of {questions.length}</span>
+                <div style={{ display:'flex', gap:'4px' }}>
+                    {questions.map((_,i) => <div key={i} style={{ width:20, height:4, borderRadius:2, background: i===currentQ ? 'var(--accent)' : answers[i] ? 'var(--success)' : 'rgba(255,255,255,0.1)' }} />)}
+                </div>
+            </div>
+            <h3 style={{ fontSize:'1.1rem', marginBottom:'1rem', lineHeight:1.5 }}>{q.question}</h3>
+            {q.hint && <p style={{ fontSize:'0.8rem', color:'var(--text-secondary)', marginBottom:'1rem', fontStyle:'italic' }}>💡 {q.hint}</p>}
+            <textarea value={answers[currentQ]||''} onChange={e => setAnswers({...answers,[currentQ]:e.target.value})}
+                placeholder="Type your answer..." rows={3}
+                style={{ width:'100%', background:'rgba(0,0,0,0.2)', border:'1px solid var(--border)', padding:'0.8rem', borderRadius:'10px', color:'white', resize:'vertical', fontFamily:'inherit', boxSizing:'border-box' }} />
+            <div style={{ display:'flex', gap:'0.8rem', marginTop:'1rem' }}>
+                {currentQ > 0 && <button onClick={() => setCurrentQ(currentQ-1)} style={{ flex:1, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'white', padding:'0.7rem', borderRadius:'10px', cursor:'pointer' }}>← Back</button>}
+                {currentQ < questions.length-1
+                    ? <button onClick={() => setCurrentQ(currentQ+1)} style={{ flex:1, background:'var(--accent)', color:'white', border:'none', padding:'0.7rem', borderRadius:'10px', fontWeight:600, cursor:'pointer' }}>Next →</button>
+                    : <button onClick={submitQuiz} disabled={submitting} style={{ flex:1, background:'var(--success)', color:'white', border:'none', padding:'0.7rem', borderRadius:'10px', fontWeight:600, cursor: submitting ? 'not-allowed' : 'pointer' }}>
+                        {submitting ? <AILoader label="Grading..." /> : 'Submit Quiz'}
+                    </button>}
+            </div>
+        </div>
+    );
+};
+
+// ── Main TopicDetail ──────────────────────────────────────────────────────────
+const TopicDetail = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [topic, setTopic] = useState(null);
+    const [sessions, setSessions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [aiSummary, setAiSummary] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState('sessions');
+    const { user, token, refreshUser } = React.useContext(AuthContext);
+    const { socket } = React.useContext(SocketContext);
+
+    // ── Study timer state ─────────────────────────────────────────────────────
+    const [isStudying, setIsStudying] = useState(false);
+    const [studySeconds, setStudySeconds] = useState(0);
+    const [showLogModal, setShowLogModal] = useState(false);
+    const studyIntervalRef = useRef(null);
+    const studyStartRef = useRef(null);
+
+    // Start / stop the live timer
+    useEffect(() => {
+        if (isStudying) {
+            studyStartRef.current = Date.now() - studySeconds * 1000;
+            studyIntervalRef.current = setInterval(() => {
+                setStudySeconds(Math.floor((Date.now() - studyStartRef.current) / 1000));
+            }, 1000);
+        } else {
+            clearInterval(studyIntervalRef.current);
+        }
+        return () => clearInterval(studyIntervalRef.current);
+    }, [isStudying]);
+
+    const handleStartStudy = () => {
+        setStudySeconds(0);
+        setIsStudying(true);
+    };
+
+    const handleStopStudy = () => {
+        setIsStudying(false);
+        clearInterval(studyIntervalRef.current);
+        // Only show modal if studied for at least 30 seconds
+        if (studySeconds >= 30) {
+            setShowLogModal(true);
+        } else {
+            setStudySeconds(0);
+        }
+    };
+
+    // Socket presence
+    useEffect(() => {
+        if (!isStudying || !socket || !topic?.workspaceId || !user) return;
+        socket.emit('startStudy', { workspaceId:topic.workspaceId, userId:user.id||user._id, username:user.username, topicTitle:topic.title });
+        return () => socket.emit('stopStudy', { workspaceId:topic.workspaceId, userId:user.id||user._id });
+    }, [isStudying, topic, socket, user]);
+
+    useEffect(() => { fetchData(); }, [id]);
+
+    const fetchData = async () => {
+        try {
+            const [tRes, sRes] = await Promise.all([
+                fetch(`${API_URL}/api/topics/${id}`, { headers:{'Authorization':`Bearer ${token}`} }),
+                fetch(`${API_URL}/api/sessions/${id}`)
+            ]);
+            if (tRes.ok) setTopic(await tRes.json());
+            if (sRes.ok) setSessions(await sRes.json());
+        } catch (err) { console.error(err); }
+        finally { setLoading(false); }
+    };
+
+    const handleAddSession = useCallback(async (sessionData) => {
+        const res = await fetch(`${API_URL}/api/sessions`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+            body: JSON.stringify({ ...sessionData, topicId: id })
+        });
+        if (res.ok) { fetchData(); refreshUser(); }
+    }, [id, token]);
+
+    const handleSaveFromModal = async (data) => {
+        setShowLogModal(false);
+        await handleAddSession(data);
+        setStudySeconds(0);
+    };
+
+    const handleDiscardModal = () => {
+        setShowLogModal(false);
+        setStudySeconds(0);
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm('Delete this topic?')) return;
+        await fetch(`${API_URL}/api/topics/${id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${token}`} });
+        navigate('/');
+    };
+
+    const handleStatusChange = async (newStatus) => {
+        const res = await fetch(`${API_URL}/api/topics/${id}/status`, {
+            method:'PATCH',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+            body: JSON.stringify({ status: newStatus })
+        });
+        setTopic(await res.json());
+        refreshUser();
+    };
+
+    const handleDeleteSession = async (sid) => {
+        await fetch(`${API_URL}/api/sessions/${sid}`, { method:'DELETE', headers:{'Authorization':`Bearer ${token}`} });
+        fetchData();
+    };
+
+    const handleImproveNotes = async (sid, notes) => {
+        const res = await fetch(`${API_URL}/api/ai/improve-notes`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ notes, topic: topic.title })
+        });
+        return (await res.json()).improvedNotes;
+    };
+
+    const handleSaveImprovedNotes = async (sid, improved) => {
+        await fetch(`${API_URL}/api/sessions/${sid}/notes`, {
+            method:'PATCH', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+            body: JSON.stringify({ notes: improved })
+        });
+        fetchData();
+    };
+
+    const handleGenerateSummary = async () => {
+        setAiLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/ai/summarize`, {
+                method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+                body: JSON.stringify({ sessions, query:`Summarize my progress on ${topic.title}` })
+            });
+            const data = await res.json();
+            setAiSummary(data.summary || data.analysis || 'No summary generated.');
+        } catch (err) { console.error(err); }
+        finally { setAiLoading(false); }
+    };
+
+    const handlePomodoroComplete = useCallback((minutes) => {
+        handleAddSession({ duration:minutes, notes:`🍅 Pomodoro — ${minutes} min focused study.`, mood:'Great', difficulty:'Medium' });
+    }, [handleAddSession]);
+
+    if (loading) return <div style={{ padding:'2rem', textAlign:'center' }}><Loader2 size={32} className="spin" color="var(--accent)"/></div>;
+    if (!topic) return <div style={{ padding:'2rem', textAlign:'center' }}>Topic not found</div>;
+
+    const tabs = [
+        { id:'sessions', label:'Sessions' },
+        { id:'pomodoro', label:'🍅 Pomodoro' },
+        { id:'quiz', label:'🧠 AI Quiz' },
+        { id:'summary', label:'AI Summary' }
+    ];
+
+    return (
+        <div>
+            {/* Session log modal */}
+            <AnimatePresence>
+                {showLogModal && (
+                    <SessionLogModal
+                        elapsed={studySeconds}
+                        topicTitle={topic.title}
+                        onSave={handleSaveFromModal}
+                        onDiscard={handleDiscardModal}
+                    />
+                )}
+            </AnimatePresence>
+
+            <button onClick={() => navigate('/')} style={{ background:'none', border:'none', color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem', cursor:'pointer' }}>
+                <ArrowLeft size={20}/> Back to Dashboard
+            </button>
+
+            <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}}
+                style={{ background:'var(--card-bg)', padding:'2rem', borderRadius:'16px', border:'1px solid var(--border)', marginBottom:'2rem' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'1rem' }}>
+                    <div>
+                        <span style={{ color:'var(--accent)', letterSpacing:'1px', textTransform:'uppercase', fontSize:'0.8rem' }}>{topic.category}</span>
+                        <h1 style={{ fontSize:'2.5rem', margin:'0.5rem 0' }}>{topic.title}</h1>
+                        {topic.goal && <p style={{ color:'var(--text-secondary)', fontSize:'1.1rem', margin:0 }}>Goal: {topic.goal}</p>}
+                        <div style={{ display:'flex', gap:'1rem', marginTop:'0.5rem', fontSize:'0.85rem', color:'var(--text-secondary)', flexWrap:'wrap', alignItems:'center' }}>
+                            {topic.totalStudyMinutes > 0 && <span>⏱ {Math.floor(topic.totalStudyMinutes/60)}h {topic.totalStudyMinutes%60}m studied</span>}
+                            {topic.difficulty && <span>📊 {topic.difficulty}</span>}
+                            {topic.nextReviewDate && <span>🔄 Review: {new Date(topic.nextReviewDate).toLocaleDateString()}</span>}
+                            {/* Live timer shown inline when studying */}
+                            {isStudying && <LiveTimer seconds={studySeconds} />}
+                        </div>
+                    </div>
+                    <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', alignItems:'center' }}>
+                        <select value={topic.status} onChange={e => handleStatusChange(e.target.value)}
+                            style={{ background:'var(--bg-color)', color:'white', border:'1px solid var(--border)', padding:'0.5rem 1rem', borderRadius:'8px' }}>
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Revised">Revised</option>
+                        </select>
+
+                        {/* Study Now / Stop Study button */}
+                        <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={isStudying ? handleStopStudy : handleStartStudy}
+                            style={{ background: isStudying ? 'var(--danger)' : 'var(--success)', color:'white', border:'none', padding:'0.6rem 1.5rem', borderRadius:'8px', display:'flex', alignItems:'center', gap:'0.6rem', fontWeight:700, cursor:'pointer', minWidth:'140px', justifyContent:'center' }}>
+                            {isStudying
+                                ? <><StopCircle size={18}/> Stop Study</>
+                                : <><Play size={18}/> Study Now</>}
+                        </motion.button>
+
+                        <button onClick={handleDelete} style={{ background:'rgba(239,68,68,0.1)', color:'var(--danger)', border:'none', padding:'0.5rem', borderRadius:'8px', cursor:'pointer' }}>
+                            <Trash2 size={20}/>
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* Tabs */}
+            <div style={{ display:'flex', gap:'0.5rem', marginBottom:'1.5rem', background:'rgba(255,255,255,0.03)', padding:'0.4rem', borderRadius:'14px', width:'fit-content', flexWrap:'wrap' }}>
+                {tabs.map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        style={{ background: activeTab===tab.id ? 'var(--accent)' : 'transparent', border:'none', color:'white', padding:'0.5rem 1.2rem', borderRadius:'10px', cursor:'pointer', fontWeight: activeTab===tab.id ? 600 : 400, transition:'0.2s', fontSize:'0.9rem' }}>
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            <AnimatePresence mode="wait">
+                {activeTab === 'sessions' && (
+                    <motion.div key="sessions" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                        <SessionLog sessions={sessions} onAddSession={handleAddSession} onDeleteSession={handleDeleteSession} onImproveNotes={handleImproveNotes} onSaveImprovedNotes={handleSaveImprovedNotes} />
+                    </motion.div>
+                )}
+                {activeTab === 'pomodoro' && (
+                    <motion.div key="pomodoro" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                        <div style={{ background:'var(--card-bg)', borderRadius:'16px', border:'1px solid var(--border)', maxWidth:'420px' }}>
+                            <div style={{ padding:'1.5rem 1.5rem 0', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                <Timer size={20} color="var(--accent)"/>
+                                <h3 style={{ margin:0 }}>Pomodoro Timer</h3>
+                            </div>
+                            <PomodoroTimer onSessionComplete={handlePomodoroComplete} />
+                        </div>
+                    </motion.div>
+                )}
+                {activeTab === 'quiz' && (
+                    <motion.div key="quiz" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                        <div style={{ background:'var(--card-bg)', borderRadius:'16px', border:'1px solid var(--border)', maxWidth:'600px' }}>
+                            <QuizMode topicId={id} token={token} onXpEarned={() => refreshUser()} />
+                        </div>
+                    </motion.div>
+                )}
+                {activeTab === 'summary' && (
+                    <motion.div key="summary" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                        <div style={{ background:'var(--card-bg)', padding:'2rem', borderRadius:'16px', border:'1px solid var(--border)' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem' }}>
+                                <h3 style={{ fontSize:'1.25rem', display:'flex', alignItems:'center', gap:'0.5rem', margin:0 }}>
+                                    <BrainCircuit size={20} color="var(--accent)"/> AI Progress Summary
+                                </h3>
+                                <button onClick={handleGenerateSummary} disabled={aiLoading}
+                                    style={{ background:'var(--accent)', color:'white', border:'none', padding:'0.5rem 1rem', borderRadius:'6px', opacity: aiLoading ? 0.7 : 1, cursor: aiLoading ? 'not-allowed' : 'pointer' }}>
+                                    {aiLoading ? 'Generating...' : 'Generate Summary'}
+                                </button>
+                            </div>
+                            {aiLoading && <AILoader label="Analyzing your progress..." />}
+                            {!aiLoading && aiSummary && (
+                                <motion.div initial={{opacity:0}} animate={{opacity:1}}
+                                    style={{ background:'rgba(16,185,129,0.1)', padding:'1rem', borderRadius:'8px', borderLeft:'4px solid var(--success)', lineHeight:1.7 }}>
+                                    {aiSummary}
+                                </motion.div>
+                            )}
+                            {!aiLoading && !aiSummary && (
+                                <p style={{ color:'var(--text-secondary)', textAlign:'center', padding:'2rem' }}>
+                                    Click "Generate Summary" to get an AI analysis of your progress on this topic.
+                                </p>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+export default TopicDetail;
