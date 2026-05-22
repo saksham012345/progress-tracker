@@ -85,6 +85,9 @@ const authRoutes = require('./routes/auth');
 app.use('/api', apiRoutes);
 app.use('/api/auth', authRoutes);
 
+// Make io accessible to controllers via req.app.get('io')
+// Must be set AFTER io is created — done below after server/io init
+
 // Error Handler (Must be last)
 app.use(errorHandler);
 
@@ -151,6 +154,11 @@ io.on('connection', (socket) => {
         socket.to(data.workspaceId).emit('receiveNoteUpdate', data);
     });
 
+    // Real-time topic/session updates — broadcast to all sockets of the same user
+    socket.on('joinUserRoom', (userId) => {
+        socket.join(`user:${userId}`);
+    });
+
     socket.on('disconnect', () => {
         console.log('🔌 User disconnected');
     });
@@ -158,4 +166,6 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    // Attach io to app so controllers can emit events via req.app.get('io')
+    app.set('io', io);
 });

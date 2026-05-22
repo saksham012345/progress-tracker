@@ -8,13 +8,36 @@ export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
 
+    // On mount: validate token against backend. If invalid, clear it.
     useEffect(() => {
-        // Load user if token exists (optional: verify token with backend)
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-        setLoading(false);
+        const storedToken = localStorage.getItem('token');
+        if (!storedToken) { setLoading(false); return; }
+
+        fetch(`${API_URL}/api/auth/me`, {
+            headers: { 'Authorization': `Bearer ${storedToken}` }
+        })
+            .then(res => {
+                if (res.ok) return res.json();
+                // Token rejected by server — clear everything
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setToken(null);
+                setUser(null);
+                return null;
+            })
+            .then(data => {
+                if (data) {
+                    setUser(data);
+                    setToken(storedToken);
+                    localStorage.setItem('user', JSON.stringify(data));
+                }
+            })
+            .catch(() => {
+                // Network error — fall back to cached user so app still loads offline
+                const cached = localStorage.getItem('user');
+                if (cached) setUser(JSON.parse(cached));
+            })
+            .finally(() => setLoading(false));
     }, []);
 
     const login = async (email, password) => {
@@ -24,16 +47,12 @@ export const AuthProvider = ({ children }) => {
             body: JSON.stringify({ email, password })
         });
         const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.msg || 'Login failed');
-        }
+        if (!res.ok) throw new Error(data.msg || 'Login failed');
 
         setToken(data.token);
         setUser(data.user);
-
         localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user)); // Simple persistence
+        localStorage.setItem('user', JSON.stringify(data.user));
     };
 
     const signup = async (username, email, password) => {
@@ -43,14 +62,10 @@ export const AuthProvider = ({ children }) => {
             body: JSON.stringify({ username, email, password })
         });
         const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.msg || 'Signup failed');
-        }
+        if (!res.ok) throw new Error(data.msg || 'Signup failed');
 
         setToken(data.token);
         setUser(data.user);
-
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
     };

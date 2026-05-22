@@ -5,6 +5,7 @@ import TopicCard from '../components/TopicCard';
 import GamificationHeader from '../components/GamificationHeader';
 import { API_URL } from '../config';
 import { AuthContext } from '../context/AuthContext';
+import { SocketContext } from '../context/SocketContext';
 
 const Dashboard = () => {
     const [topics, setTopics] = useState([]);
@@ -17,6 +18,7 @@ const Dashboard = () => {
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderData, setReminderData] = useState({ title: '', message: '', time: '' });
     const { token, user, refreshUser } = useContext(AuthContext);
+    const { socket } = useContext(SocketContext);
 
     useEffect(() => {
         fetchTopics();
@@ -24,12 +26,35 @@ const Dashboard = () => {
         fetchDueReviews();
     }, []);
 
+    // Join user room and listen for real-time topic changes
+    useEffect(() => {
+        if (!socket || !user) return;
+        socket.emit('joinUserRoom', user.id || user._id);
+
+        const onCreated = (topic) => setTopics(prev => [topic, ...prev]);
+        const onUpdated = (topic) => setTopics(prev => prev.map(t => t._id === topic._id ? topic : t));
+        const onDeleted = ({ _id }) => setTopics(prev => prev.filter(t => t._id !== _id));
+
+        socket.on('topicCreated', onCreated);
+        socket.on('topicUpdated', onUpdated);
+        socket.on('topicDeleted', onDeleted);
+
+        return () => {
+            socket.off('topicCreated', onCreated);
+            socket.off('topicUpdated', onUpdated);
+            socket.off('topicDeleted', onDeleted);
+        };
+    }, [socket, user]);
+
     const fetchDueReviews = async () => {
         try {
             const res = await fetch(`${API_URL}/api/topics/due-review`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.ok) setDueReviews(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setDueReviews(Array.isArray(data) ? data : []);
+            }
         } catch (err) { console.error(err); }
     };
 
@@ -38,20 +63,25 @@ const Dashboard = () => {
             const res = await fetch(`${API_URL}/api/reminders`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await res.json();
-            setReminders(data);
+            if (res.ok) {
+                const data = await res.json();
+                setReminders(Array.isArray(data) ? data : []);
+            }
         } catch (err) { console.error('Fetch Reminders Error:', err); }
     };
 
     const fetchTopics = async () => {
         try {
-            // Fixed: include auth header so only user's own topics are returned
             const res = await fetch(`${API_URL}/api/topics`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await res.json();
-            setTopics(data);
-        } catch (err) { console.error(err); }
+            if (res.ok) {
+                const data = await res.json();
+                setTopics(Array.isArray(data) ? data : []);
+            } else {
+                setTopics([]);
+            }
+        } catch (err) { console.error(err); setTopics([]); }
         finally { setLoading(false); }
     };
 

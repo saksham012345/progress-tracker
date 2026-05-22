@@ -34,6 +34,17 @@ async function awardBadge(user, badgeName, badgeIcon) {
     return false;
 }
 
+// Helper to broadcast to all tabs/devices of a user
+function emitToUser(req, event, payload) {
+    try {
+        // server.js attaches io to app via app.set('io', io)
+        const io = req.app.get('io');
+        if (io && req.user?.id) {
+            io.to(`user:${req.user.id}`).emit(event, payload);
+        }
+    } catch (e) {}
+}
+
 exports.getTopic = async (req, res) => {
     try {
         const topic = await Topic.findOne({ _id: req.params.id, userId: req.user.id });
@@ -68,6 +79,7 @@ exports.createTopic = async (req, res) => {
 
     try {
         const newTopic = await topic.save();
+        emitToUser(req, 'topicCreated', newTopic);
         res.status(201).json(newTopic);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -87,6 +99,7 @@ exports.updateTopic = async (req, res) => {
         if (difficulty) topic.difficulty = difficulty;
 
         const updated = await topic.save();
+        emitToUser(req, 'topicUpdated', updated);
         res.json(updated);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -96,6 +109,7 @@ exports.updateTopic = async (req, res) => {
 exports.deleteTopic = async (req, res) => {
     try {
         await Topic.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
+        emitToUser(req, 'topicDeleted', { _id: req.params.id });
         res.json({ message: 'Topic deleted' });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -182,6 +196,7 @@ exports.updateTopicStatus = async (req, res) => {
         }
 
         const updatedTopic = await topic.save();
+        emitToUser(req, 'topicUpdated', updatedTopic);
         res.json(updatedTopic);
     } catch (err) {
         res.status(400).json({ message: err.message });
