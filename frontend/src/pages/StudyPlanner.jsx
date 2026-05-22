@@ -18,6 +18,7 @@ const StudyPlanner = () => {
     const [showSaved, setShowSaved] = useState(false);
     const [expandedPlan, setExpandedPlan] = useState(null);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         fetchSavedPlans();
@@ -42,6 +43,7 @@ const StudyPlanner = () => {
         setLoading(true);
         setPlan('');
         setSaveSuccess(false);
+        setError('');
 
         try {
             const res = await fetch(`${API_URL}/api/ai/plan`, {
@@ -53,10 +55,25 @@ const StudyPlanner = () => {
                     hours: formData.hours
                 })
             });
+            
             const data = await res.json();
-            setPlan(data.plan);
+            
+            if (!res.ok) {
+                const errorMessage = data.message || 
+                    (res.status === 503 ? 'AI Service is starting up. Please try again in 30-60 seconds.' : 
+                     'Failed to generate plan. Please try again.');
+                setError(errorMessage);
+                return;
+            }
+            
+            if (data.plan) {
+                setPlan(data.plan);
+            } else {
+                setError('Generated plan was empty. Please try again.');
+            }
         } catch (err) {
             console.error(err);
+            setError('Network error: Unable to reach the server. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -221,7 +238,20 @@ const StudyPlanner = () => {
                     </div>
 
                     <div style={{ flex: 1 }}>
-                        {plan ? (
+                        {error ? (
+                            <div style={{ 
+                                padding: '1.5rem',
+                                background: 'rgba(255, 0, 0, 0.1)',
+                                border: '1px solid rgba(255, 0, 0, 0.3)',
+                                borderRadius: '8px',
+                                color: '#ff6b6b',
+                                fontSize: '0.95rem',
+                                lineHeight: '1.6'
+                            }}>
+                                <strong>⚠️ Error:</strong><br/>
+                                {error}
+                            </div>
+                        ) : plan ? (
                             <div style={{ whiteSpace: 'pre-line', lineHeight: '1.8', color: 'var(--text-secondary)' }}>
                                 {plan}
                             </div>

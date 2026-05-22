@@ -14,10 +14,20 @@ document_embeddings = None
 import requests
 
 def get_provider():
-    if os.getenv("AI_PROVIDER") == "ollama":
-        return "ollama"
+    """
+    Determine which AI provider to use.
+    Priority: Environment variable > GEMINI_API_KEY presence > Ollama availability > default ollama
+    """
+    env_provider = os.getenv("AI_PROVIDER", "").lower()
+    
+    # Explicit provider set
+    if env_provider in ["gemini", "ollama"]:
+        return env_provider
+    
+    # Auto-detect based on available API keys
     if os.getenv("GEMINI_API_KEY"):
         return "gemini"
+    
     return "ollama"
 
 def call_ollama_embedding(text):

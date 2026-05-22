@@ -95,6 +95,33 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Detailed Health Check (including AI service)
+app.get('/api/health/detailed', async (req, res) => {
+    try {
+        const axios = require('axios');
+        const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+        const aiServiceUrl = AI_SERVICE_URL.startsWith('http') ? AI_SERVICE_URL : `https://${AI_SERVICE_URL}`;
+        
+        let aiStatus = 'unknown';
+        try {
+            const aiResponse = await axios.get(`${aiServiceUrl}/`, { timeout: 3000 });
+            aiStatus = aiResponse.status === 200 ? 'healthy' : 'unreachable';
+        } catch (err) {
+            aiStatus = 'unreachable';
+        }
+        
+        res.json({
+            backend: 'healthy',
+            database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+            aiService: aiStatus,
+            aiServiceUrl: aiServiceUrl,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {

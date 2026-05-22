@@ -4,6 +4,7 @@ from typing import List, Optional
 import uvicorn
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 # Load environment variables from .env file
 load_dotenv()
@@ -260,6 +261,19 @@ def get_knowledge_base():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "model": generator.GENERATOR_MODEL_NAME}
+
+@app.get("/debug")
+def debug_info():
+    """Debug endpoint to check configuration and connectivity"""
+    return {
+        "status": "ok",
+        "provider": generator.get_provider(),
+        "model": os.getenv('OLLAMA_MODEL', 'qwen2.5:0.5b') if generator.get_provider() == 'ollama' else 'gemini-1.5-flash',
+        "gemini_key_set": bool(os.getenv("GEMINI_API_KEY")),
+        "ai_provider_env": os.getenv("AI_PROVIDER", "not-set"),
+        "ollama_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "timestamp": str(datetime.now())
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

@@ -11,10 +11,23 @@ GENERATOR_MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 
 # ── Provider selection ────────────────────────────────────────────────────────
 def get_provider():
-    if os.getenv("AI_PROVIDER") == "ollama":
-        return "ollama"
+    """
+    Determine which AI provider to use.
+    Priority: Environment variable > GEMINI_API_KEY presence > Ollama availability > default ollama
+    """
+    env_provider = os.getenv("AI_PROVIDER", "").lower()
+    
+    # Explicit provider set
+    if env_provider in ["gemini", "ollama"]:
+        print(f"Using provider from AI_PROVIDER env var: {env_provider}")
+        return env_provider
+    
+    # Auto-detect based on available API keys
     if os.getenv("GEMINI_API_KEY"):
+        print("Auto-detected Gemini API key, using Gemini provider")
         return "gemini"
+    
+    print("No API key found, defaulting to Ollama (local)")
     return "ollama"
 
 def initialize_generator():

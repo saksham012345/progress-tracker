@@ -5,16 +5,69 @@ const Note = require('../models/Note');
 const Resource = require('../models/Resource');
 const User = require('../models/User');
 
+// Priority: Render env var > .env > fallback
 let AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
-if (!AI_SERVICE_URL.startsWith('http')) AI_SERVICE_URL = `https://${AI_SERVICE_URL}`;
 
-const aiClient = axios.create({ baseURL: AI_SERVICE_URL, timeout: 180000 });
+// If URL doesn't include http, add https (for Render service URLs like "service-name.onrender.com")
+if (AI_SERVICE_URL && !AI_SERVICE_URL.startsWith('http')) {
+    AI_SERVICE_URL = `https://${AI_SERVICE_URL}`;
+}
+
+console.log(`🤖 AI Service URL configured as: ${AI_SERVICE_URL}`);
+
+// Reduced timeout from 180s to 30s for faster failure detection
+const aiClient = axios.create({ 
+    baseURL: AI_SERVICE_URL, 
+    timeout: 30000,
+    validateStatus: () => true  // Don't throw on any status code
+});
 
 const handleAiError = (res, err) => {
-    console.error('AI Service Error:', err.message);
-    if (err.response) return res.status(err.response.status).json(err.response.data);
-    if (err.request) return res.status(504).json({ message: 'AI Service Timeout. It may be waking up — try again in 30s.' });
-    return res.status(502).json({ message: 'AI Service Connectivity Error', error: err.message });
+    console.error('❌ AI Service Error:', err.message);
+    
+    if (err.response) {
+        console.error(`   Response Status: ${err.response.status}`);
+        console.error(`   Response Data: ${JSON.stringify(err.response.data).substring(0, 200)}`);
+        return res.status(err.response.status).json(err.response.data);
+    }
+    
+    if (err.code === 'ECONNREFUSED') {
+        console.error(`   Connection Refused - AI service not accessible at ${AI_SERVICE_URL}`);
+        return res.status(503).json({ 
+            message: `Cannot reach AI service at ${AI_SERVICE_URL}. Check if service is running.`,
+            retryAfter: 60
+        });
+    }
+    
+    if (err.code === 'ENOTFOUND') {
+        console.error(`   Host not found - ${AI_SERVICE_URL}`);
+        return res.status(503).json({ 
+            message: 'AI service host not found. Configuration error.',
+            retryAfter: 60
+        });
+    }
+    
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        console.error(`   Request Timeout after ${err.config?.timeout}ms`);
+        return res.status(503).json({ 
+            message: 'AI Service is busy or waking up. Please try again in 30-60 seconds.',
+            retryAfter: 60
+        });
+    }
+    
+    if (err.request) {
+        console.error(`   No response received from AI service`);
+        return res.status(503).json({ 
+            message: 'AI Service unavailable. It may be starting up. Please try again in 30-60 seconds.',
+            retryAfter: 60
+        });
+    }
+    
+    console.error(`   Other error: ${err.code}`);
+    return res.status(502).json({ 
+        message: 'AI Service Connection Error. Please try again shortly.',
+        error: err.message 
+    });
 };
 
 exports.summarizeProgress = async (req, res) => {
@@ -116,15 +169,43 @@ Due for review: ${dueTopics.map(t => t.title).join(', ') || 'None'}`;
 };
 
 exports.generateStudyPlan = async (req, res) => {
+    console.log(`📋 [AI] Plan generation request received`);
+    console.log(`   Payload: ${JSON.stringify(req.body).substring(0, 100)}`);
+    
     try {
         const { topics, goals, hours } = req.body;
+        
+        if (!topics || !Array.isArray(topics) || topics.length === 0) {
+            return res.status(400).json({ message: 'Topics array is required and must not be empty' });
+        }
+
+        console.log(`   Sending to AI Service: ${AI_SERVICE_URL}/rag/plan`);
         const response = await aiClient.post('/rag/plan', {
             topics,
-            goals,
+            goals: goals || 'General learning',
             hours_per_week: parseInt(hours) || 10
         });
+        
+        console.log(`   AI Response status: ${response.status}`);
+        
+        if (response.status !== 200) {
+            console.error(`   ❌ AI Service returned ${response.status}:`, response.data);
+            return handleAiError(res, { 
+                response: { status: response.status, data: response.data },
+                message: `AI Service error: ${response.status}`
+            });
+        }
+        
+        if (!response.data.plan) {
+            console.warn(`   ⚠️ AI returned no plan data`);
+            return res.status(500).json({ message: 'AI service generated empty response' });
+        }
+        
+        console.log(`   ✅ Plan generated successfully (${response.data.plan.length} chars)`);
         res.json(response.data);
     } catch (err) {
+        console.error(`   ❌ Exception:`, err.message);
+        console.error(`   Code: ${err.code}, Status: ${err.response?.status}`);
         handleAiError(res, err);
     }
 };

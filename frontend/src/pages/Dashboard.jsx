@@ -132,12 +132,32 @@ const Dashboard = () => {
     const handleAddReminder = async (e) => {
         e.preventDefault();
         try {
+            // Convert datetime-local string to ISO with local timezone offset
+            // datetime-local gives "2026-05-22T10:28" — no timezone info
+            // We must tell the server this is LOCAL time, not UTC
+            const localDateStr = reminderData.time; // e.g. "2026-05-22T10:28"
+            const localDate = new Date(localDateStr);
+            // localDate is already in local time — toISOString() would convert to UTC
+            // Instead send the local ISO string with offset
+            const tzOffset = -localDate.getTimezoneOffset(); // minutes
+            const sign = tzOffset >= 0 ? '+' : '-';
+            const pad = n => String(Math.floor(Math.abs(n))).padStart(2, '0');
+            const isoWithTz = localDateStr + ':00' + sign + pad(tzOffset / 60) + ':' + pad(tzOffset % 60);
+
             const res = await fetch(`${API_URL}/api/reminders`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ title: reminderData.title, message: reminderData.message, reminderTime: reminderData.time })
+                body: JSON.stringify({
+                    title: reminderData.title,
+                    message: reminderData.message,
+                    reminderTime: isoWithTz
+                })
             });
-            if (res.ok) { setReminderData({ title: '', message: '', time: '' }); setShowReminderForm(false); fetchReminders(); }
+            if (res.ok) {
+                setReminderData({ title: '', message: '', time: '' });
+                setShowReminderForm(false);
+                fetchReminders();
+            }
         } catch (err) { console.error(err); }
     };
 
@@ -373,7 +393,9 @@ const Dashboard = () => {
                                 <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddReminder} style={{ overflow: 'hidden', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                     <input placeholder="Alarm Title" value={reminderData.title} onChange={e => setReminderData({ ...reminderData, title: e.target.value })} required style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', padding: '0.6rem', borderRadius: '8px', color: 'white', boxSizing: 'border-box' }} />
                                     <input placeholder="Message (optional)" value={reminderData.message} onChange={e => setReminderData({ ...reminderData, message: e.target.value })} style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', padding: '0.6rem', borderRadius: '8px', color: 'white', boxSizing: 'border-box' }} />
-                                    <input type="datetime-local" value={reminderData.time} onChange={e => setReminderData({ ...reminderData, time: e.target.value })} required style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', padding: '0.6rem', borderRadius: '8px', color: 'white', boxSizing: 'border-box' }} />
+                                    <input type="datetime-local" value={reminderData.time} onChange={e => setReminderData({ ...reminderData, time: e.target.value })} required
+                                        min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', padding: '0.6rem', borderRadius: '8px', color: 'white', boxSizing: 'border-box', colorScheme: 'dark' }} />
                                     <button type="submit" style={{ background: 'var(--accent)', color: 'white', border: 'none', padding: '0.6rem', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Set Alarm</button>
                                 </motion.form>
                             )}
@@ -390,7 +412,11 @@ const Dashboard = () => {
                                         <div style={{ flex: 1 }}>
                                             <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>{r.title}</p>
                                             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                {new Date(r.reminderTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(r.reminderTime).toLocaleString(undefined, {
+                                                    month: 'short', day: 'numeric',
+                                                    hour: '2-digit', minute: '2-digit',
+                                                    hour12: true
+                                                })}
                                             </p>
                                         </div>
                                         <button onClick={() => deleteReminder(r._id)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', opacity: 0.5 }}>
