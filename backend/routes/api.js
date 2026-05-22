@@ -47,8 +47,11 @@ router.post('/quiz/submit', auth, quizController.submitQuiz);
 router.get('/quiz/history/:topicId', auth, quizController.getQuizHistory);
 
 // ── Workspace Routes ──────────────────────────────────────────
+router.get('/workspaces/invites', auth, workspaceController.getMyInvites);
 router.get('/workspaces', auth, workspaceController.getWorkspaces);
 router.post('/workspaces', auth, workspaceController.createWorkspace);
+router.post('/workspaces/:id/invite', auth, workspaceController.sendInvite);
+router.patch('/workspaces/:id/invites/:inviteId', auth, workspaceController.respondToInvite);
 router.post('/workspaces/:id/members', auth, workspaceController.addMember);
 router.get('/workspaces/:id/chat', auth, workspaceController.getChatHistory);
 

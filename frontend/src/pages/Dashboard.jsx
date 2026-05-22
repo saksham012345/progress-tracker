@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, Loader2, BookOpen, Target, Sparkles, Bell, Trash2, Calendar, Flame, RefreshCw, Edit2 } from 'lucide-react';
+import { Plus, X, Loader2, BookOpen, Target, Sparkles, Bell, Trash2, Calendar, Flame, RefreshCw, Edit2, Users, CheckCircle, XCircle } from 'lucide-react';
 import TopicCard from '../components/TopicCard';
 import GamificationHeader from '../components/GamificationHeader';
 import { API_URL } from '../config';
@@ -17,6 +17,7 @@ const Dashboard = () => {
     const [reminders, setReminders] = useState([]);
     const [showReminderForm, setShowReminderForm] = useState(false);
     const [reminderData, setReminderData] = useState({ title: '', message: '', time: '' });
+    const [workspaceInvites, setWorkspaceInvites] = useState([]);
     const { token, user, refreshUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
 
@@ -24,6 +25,7 @@ const Dashboard = () => {
         fetchTopics();
         fetchReminders();
         fetchDueReviews();
+        fetchInvites();
     }, []);
 
     // Join user room and listen for real-time topic changes
@@ -34,15 +36,18 @@ const Dashboard = () => {
         const onCreated = (topic) => setTopics(prev => [topic, ...prev]);
         const onUpdated = (topic) => setTopics(prev => prev.map(t => t._id === topic._id ? topic : t));
         const onDeleted = ({ _id }) => setTopics(prev => prev.filter(t => t._id !== _id));
+        const onInvite = (invite) => setWorkspaceInvites(prev => [...prev, invite]);
 
         socket.on('topicCreated', onCreated);
         socket.on('topicUpdated', onUpdated);
         socket.on('topicDeleted', onDeleted);
+        socket.on('workspaceInvite', onInvite);
 
         return () => {
             socket.off('topicCreated', onCreated);
             socket.off('topicUpdated', onUpdated);
             socket.off('topicDeleted', onDeleted);
+            socket.off('workspaceInvite', onInvite);
         };
     }, [socket, user]);
 
@@ -54,6 +59,31 @@ const Dashboard = () => {
             if (res.ok) {
                 const data = await res.json();
                 setDueReviews(Array.isArray(data) ? data : []);
+            }
+        } catch (err) { console.error(err); }
+    };
+
+    const fetchInvites = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/workspaces/invites`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setWorkspaceInvites(Array.isArray(data) ? data : []);
+            }
+        } catch (err) { console.error(err); }
+    };
+
+    const respondToInvite = async (invite, action) => {
+        try {
+            const res = await fetch(`${API_URL}/api/workspaces/${invite.workspaceId}/invites/${invite.inviteId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ action })
+            });
+            if (res.ok) {
+                setWorkspaceInvites(prev => prev.filter(i => i.inviteId !== invite.inviteId));
             }
         } catch (err) { console.error(err); }
     };
@@ -293,6 +323,41 @@ const Dashboard = () => {
 
                 {/* Sidebar */}
                 <aside style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                    {/* Workspace Invites */}
+                    <AnimatePresence>
+                        {workspaceInvites.length > 0 && (
+                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                className="glass-panel" style={{ padding: '1.5rem', borderRadius: '24px', background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))', border: '1px solid rgba(99,102,241,0.25)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', color: 'var(--accent)', marginBottom: '1rem' }}>
+                                    <Users size={18} />
+                                    <h3 style={{ margin: 0, fontSize: '1rem' }}>Workspace Invites</h3>
+                                    <span style={{ marginLeft: 'auto', background: 'var(--accent)', color: 'white', borderRadius: '20px', padding: '1px 8px', fontSize: '0.75rem', fontWeight: 700 }}>{workspaceInvites.length}</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    {workspaceInvites.map(inv => (
+                                        <div key={inv.inviteId} style={{ padding: '0.9rem', background: 'rgba(0,0,0,0.2)', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <p style={{ margin: '0 0 0.25rem', fontWeight: 700, fontSize: '0.9rem' }}>{inv.workspaceName}</p>
+                                            <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                                Invited by <strong style={{ color: 'white' }}>{inv.ownerUsername}</strong>
+                                                {inv.workspaceDescription && ` · ${inv.workspaceDescription}`}
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button onClick={() => respondToInvite(inv, 'accept')}
+                                                    style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--success)', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                                                    <CheckCircle size={14} /> Accept
+                                                </button>
+                                                <button onClick={() => respondToInvite(inv, 'reject')}
+                                                    style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
+                                                    <XCircle size={14} /> Decline
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '24px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', color: 'var(--accent)' }}>
