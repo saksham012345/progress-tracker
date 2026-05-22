@@ -191,8 +191,8 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+server.listen(PORT, '127.0.0.1', () => {
+    console.log(`🚀 Server is running on http://localhost:${PORT}`);
     // Attach io to app so controllers can emit events via req.app.get('io')
     app.set('io', io);
 });
