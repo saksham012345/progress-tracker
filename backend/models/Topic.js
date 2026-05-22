@@ -35,10 +35,26 @@ const topicSchema = new mongoose.Schema({
     deadline: {
         type: Date
     },
+    difficulty: {
+        type: String,
+        enum: ['Easy', 'Medium', 'Hard'],
+        default: 'Medium'
+    },
+    totalStudyMinutes: {
+        type: Number,
+        default: 0
+    },
+    nextReviewDate: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now
     }
 });
+
+// Index for fast user-scoped queries
+topicSchema.index({ userId: 1, createdAt: -1 });
+topicSchema.index({ userId: 1, status: 1 });
 
 module.exports = mongoose.model('Topic', topicSchema);

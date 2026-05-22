@@ -27,9 +27,28 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// CORS Configuration (Allow Vercel Frontend)
+// CORS — allow Vercel production + preview deployments
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
 const corsOptions = {
-    origin: process.env.FRONTEND_URL || '*', // Fallback to * for development
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Render health checks)
+        if (!origin) return callback(null, true);
+        // Allow any vercel.app subdomain + explicitly listed origins
+        if (
+            allowedOrigins.includes(origin) ||
+            /\.vercel\.app$/.test(origin) ||
+            origin === 'http://localhost:5173' ||
+            origin === 'http://localhost:3000'
+        ) {
+            return callback(null, true);
+        }
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
     optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
@@ -76,14 +95,26 @@ app.get('/api/health', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || '*',
-        methods: ["GET", "POST"]
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            if (
+                allowedOrigins.includes(origin) ||
+                /\.vercel\.app$/.test(origin) ||
+                origin === 'http://localhost:5173' ||
+                origin === 'http://localhost:3000'
+            ) return callback(null, true);
+            callback(new Error('Socket CORS not allowed'));
+        },
+        methods: ['GET', 'POST'],
+        credentials: true
     }
 });
 
 // Socket.io Logic
 io.on('connection', (socket) => {
-    console.log('👤 A user connected:', socket.id);
+    // Accept token from either auth or query (backwards compat)
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    console.log('👤 User connected:', socket.id);
 
     socket.on('joinWorkspace', (workspaceId) => {
         socket.join(workspaceId);

@@ -3,105 +3,115 @@ const Topic = require('../models/Topic');
 const Session = require('../models/Session');
 const Note = require('../models/Note');
 const Resource = require('../models/Resource');
+const User = require('../models/User');
 
 let AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+if (!AI_SERVICE_URL.startsWith('http')) AI_SERVICE_URL = `https://${AI_SERVICE_URL}`;
 
-// Ensure protocol exists (Render provides host without protocol sometimes)
-if (!AI_SERVICE_URL.startsWith('http')) {
-    AI_SERVICE_URL = `https://${AI_SERVICE_URL}`;
-}
+const aiClient = axios.create({ baseURL: AI_SERVICE_URL, timeout: 180000 });
 
-// Create an axios instance with long timeout for AI generation (Render Cold Starts)
-const aiClient = axios.create({
-    baseURL: AI_SERVICE_URL,
-    timeout: 60000 // 60 seconds
-});
+const handleAiError = (res, err) => {
+    console.error('AI Service Error:', err.message);
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    if (err.request) return res.status(504).json({ message: 'AI Service Timeout. It may be waking up — try again in 30s.' });
+    return res.status(502).json({ message: 'AI Service Connectivity Error', error: err.message });
+};
 
 exports.summarizeProgress = async (req, res) => {
     try {
-        // Fetch all data to send to RAG for context
-        // In a real app, this might be paginated or optimized
-        const topics = await Topic.find({});
-        const sessions = await Session.find({});
+        const userId = req.user?.id;
+        const topics = userId ? await Topic.find({ userId }) : [];
+        const topicIds = topics.map(t => t._id);
+        const sessions = await Session.find({ topicId: { $in: topicIds } });
 
-        const userQuery = req.body.query || "Summarize my progress";
+        const userQuery = req.body.query || 'Summarize my progress';
         const workspaceId = req.body.workspaceId;
-
-        let notes = [];
-        let resources = [];
-        
+        let notes = [], resources = [];
         if (workspaceId) {
             notes = await Note.find({ workspaceId });
             resources = await Resource.find({ workspaceId });
         }
 
-        const response = await aiClient.post('/rag/analyze', {
-            topics,
-            sessions,
-            notes,
-            resources,
-            query: userQuery
-        });
-
+        const response = await aiClient.post('/rag/analyze', { topics, sessions, notes, resources, query: userQuery });
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
-        res.status(502).json({
-            message: "AI Service unavailable. Ensure the Python RAG service is running.",
-            error: err.message
-        });
+        handleAiError(res, err);
     }
 };
 
 exports.improveNotes = async (req, res) => {
     const { notes, topic } = req.body;
-
-    if (!notes) {
-        return res.status(400).json({ message: "Notes are required" });
-    }
-
+    if (!notes) return res.status(400).json({ message: 'Notes are required' });
     try {
-        const response = await aiClient.post('/rag/improve-notes', {
-            notes,
-            topic: topic || "General"
-        });
-
+        const response = await aiClient.post('/rag/improve-notes', { notes, topic: topic || 'General' });
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
-        res.status(502).json({
-            message: "AI Service unavailable.",
-            error: err.message
-        });
+        handleAiError(res, err);
     }
 };
 
+// Persistent chat with user memory
 exports.chat = async (req, res) => {
     try {
         const { message, history, workspaceId } = req.body;
+        const userId = req.user?.id;
 
-        let notes = [];
-        let resources = [];
+        let notes = [], resources = [], userContext = '';
         if (workspaceId) {
             notes = await Note.find({ workspaceId });
             resources = await Resource.find({ workspaceId });
         }
 
-        // Pass history to Python service for context
+        // Build coach memory context from user's actual data
+        if (userId) {
+            const topics = await Topic.find({ userId }).sort({ createdAt: -1 }).limit(20);
+            const recentSessions = await Session.find({
+                topicId: { $in: topics.map(t => t._id) }
+            }).sort({ date: -1 }).limit(10).populate('topicId', 'title');
+
+            const dueTopics = topics.filter(t => t.nextReviewDate && new Date(t.nextReviewDate) <= new Date());
+
+            userContext = `User's learning context:
+Topics: ${topics.map(t => `${t.title} (${t.status}, ${t.totalStudyMinutes || 0} mins studied)`).join(', ')}
+Recent sessions: ${recentSessions.map(s => `${s.topicId?.title || 'Unknown'} for ${s.duration}min`).join(', ')}
+Due for review: ${dueTopics.map(t => t.title).join(', ') || 'None'}`;
+        }
+
+        // Use persisted history from DB if no history provided
+        let chatHistory = history || [];
+        if (userId && chatHistory.length === 0) {
+            const user = await User.findById(userId).select('chatHistory');
+            if (user?.chatHistory?.length > 0) {
+                chatHistory = user.chatHistory.slice(-20).map(m => ({ role: m.role, content: m.content }));
+            }
+        }
+
         const response = await aiClient.post('/rag/chat', {
             message,
-            history: history || [],
+            history: chatHistory,
             notes,
-            resources
+            resources,
+            user_context: userContext
         });
+
+        // Persist chat history
+        if (userId) {
+            await User.findByIdAndUpdate(userId, {
+                $push: {
+                    chatHistory: {
+                        $each: [
+                            { role: 'user', content: message },
+                            { role: 'assistant', content: response.data.reply }
+                        ],
+                        $slice: -100 // keep last 100 messages
+                    }
+                }
+            });
+        }
 
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
-        res.status(502).json({
-            message: "Chat unavailable.",
-            error: err.message
-        });
+        handleAiError(res, err);
     }
 };
 
@@ -115,41 +125,15 @@ exports.generateStudyPlan = async (req, res) => {
         });
         res.json(response.data);
     } catch (err) {
-        console.error("AI Service Error:", err.message);
-        if (err.response) {
-            // Upstream service returned an error (4xx, 5xx)
-            res.status(err.response.status).json({
-                message: "AI Service Error",
-                error: err.response.data
-            });
-        } else if (err.request) {
-            // Request made but no response (Timeout/Network)
-            res.status(504).json({
-                message: "AI Service Timeout",
-                error: "No response received from AI service. It might be starting up."
-            });
-        } else {
-            // Something else happened
-            res.status(500).json({
-                message: "Internal Server Error",
-                error: err.message
-            });
-        }
+        handleAiError(res, err);
     }
 };
 
 exports.decomposeTask = async (req, res) => {
     try {
         const { task, context } = req.body;
-        if (!task) {
-            return res.status(400).json({ message: "Task is required" });
-        }
-
-        const response = await aiClient.post('/rag/decompose', {
-            task,
-            context: context || ""
-        });
-
+        if (!task) return res.status(400).json({ message: 'Task is required' });
+        const response = await aiClient.post('/rag/decompose', { task, context: context || '' });
         res.json(response.data);
     } catch (err) {
         handleAiError(res, err);
@@ -168,35 +152,69 @@ exports.getResources = async (req, res) => {
 exports.addResource = async (req, res) => {
     try {
         const { category, content } = req.body;
-        // Proxy to AI Service
-        const response = await aiClient.post('/rag/knowledge', {
-            category,
-            content
-        });
+        const response = await aiClient.post('/rag/knowledge', { category, content });
         res.json(response.data);
     } catch (err) {
         handleAiError(res, err);
     }
 };
 
-// Helper function for consistent error handling
-const handleAiError = (res, err) => {
-    console.error("AI Service Error:", err.message);
-    if (err.response) {
-        // Upstream service returned an error (4xx, 5xx)
-        // Pass through the status and data
-        res.status(err.response.status).json(err.response.data);
-    } else if (err.request) {
-        // Request made but no response (Timeout/Network)
-        res.status(504).json({
-            message: "AI Service Timeout",
-            error: "The AI service is talking too long to respond. It works on a free tier and might be waking up. Please try again in 30 seconds."
+// GET /api/ai/chat-history — load persisted chat history
+exports.getChatHistory = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('chatHistory');
+        res.json(user?.chatHistory?.slice(-50) || []);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// DELETE /api/ai/chat-history — clear chat history
+exports.clearChatHistory = async (req, res) => {
+    try {
+        await User.findByIdAndUpdate(req.user.id, { $set: { chatHistory: [] } });
+        res.json({ message: 'Chat history cleared' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// GET /api/ai/weekly-report — AI-generated weekly progress report
+exports.weeklyReport = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId).select('-password');
+        const topics = await Topic.find({ userId });
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const sessions = await Session.find({
+            topicId: { $in: topics.map(t => t._id) },
+            date: { $gte: oneWeekAgo }
+        }).populate('topicId', 'title');
+
+        const totalMins = sessions.reduce((sum, s) => sum + s.duration, 0);
+        const dueTopics = topics.filter(t => t.nextReviewDate && new Date(t.nextReviewDate) <= new Date());
+
+        const response = await aiClient.post('/rag/analyze', {
+            topics,
+            sessions,
+            query: `Generate a weekly progress report. The user studied ${totalMins} minutes this week across ${sessions.length} sessions. 
+They have ${dueTopics.length} topics due for review. Their streak is ${user.streak} days. 
+Provide: 1) Summary of this week 2) What to focus on next week 3) Motivational insight. Keep it concise and personal.`
         });
-    } else {
-        // Something else happened
-        res.status(502).json({
-            message: "AI Service Connectivity Error",
-            error: err.message
+
+        res.json({
+            report: response.data.summary || response.data.analysis,
+            stats: {
+                totalMinutes: totalMins,
+                sessionCount: sessions.length,
+                streak: user.streak,
+                level: user.level,
+                points: user.points,
+                dueReviews: dueTopics.length
+            }
         });
+    } catch (err) {
+        handleAiError(res, err);
     }
 };

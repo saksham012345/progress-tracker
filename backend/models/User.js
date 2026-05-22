@@ -45,6 +45,21 @@ const userSchema = new mongoose.Schema({
         name: String,
         icon: String,
         earnedAt: { type: Date, default: Date.now }
+    }],
+    // Spaced repetition: track last review date per topic
+    topicReviews: [{
+        topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic' },
+        lastReviewed: Date,
+        nextReview: Date,
+        easeFactor: { type: Number, default: 2.5 }, // SM-2 algorithm
+        interval: { type: Number, default: 1 },     // days
+        repetitions: { type: Number, default: 0 }
+    }],
+    // Chat history persistence
+    chatHistory: [{
+        role: { type: String, enum: ['user', 'assistant'] },
+        content: String,
+        timestamp: { type: Date, default: Date.now }
     }]
 });
 

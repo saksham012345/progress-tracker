@@ -1,22 +1,30 @@
 services:
-  # Backend Service (Node.js)
+  # ── Backend (Node.js + Express + Socket.io) ───────────────────────────────
   - type: web
     name: hyperactive-backend
     env: node
     plan: free
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install --production
     startCommand: node server.js
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: MONGODB_URI
-        sync: false
+        sync: false          # set manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false          # set manually in Render dashboard
+      - key: PORT
+        value: 10000
+      - key: FRONTEND_URL
+        sync: false          # set to your Vercel URL after deploying frontend
       - key: AI_SERVICE_URL
         fromService:
           type: web
           name: hyperactive-ai
           property: host
 
-  # AI Service (Python)
+  # ── AI Service (Python + FastAPI) ─────────────────────────────────────────
   - type: web
     name: hyperactive-ai
     env: python
@@ -25,5 +33,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PORT
+        value: 10000
+      - key: AI_PROVIDER
+        value: gemini          # Render has no GPU — use Gemini cloud API
       - key: GEMINI_API_KEY
-        sync: false
+        sync: false            # set manually in Render dashboard

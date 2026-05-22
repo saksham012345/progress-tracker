@@ -19,10 +19,22 @@ const sessionSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    mood: {
+        type: String,
+        enum: ['Great', 'Good', 'Okay', 'Tired', 'Frustrated'],
+        default: 'Good'
+    },
+    difficulty: {
+        type: String,
+        enum: ['Easy', 'Medium', 'Hard'],
+        default: 'Medium'
+    },
     createdAt: {
         type: Date,
         default: Date.now
     }
 });
+
+sessionSchema.index({ topicId: 1, date: -1 });
 
 module.exports = mongoose.model('Session', sessionSchema);

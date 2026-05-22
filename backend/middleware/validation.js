@@ -1,17 +1,20 @@
 const Joi = require('joi');
 
 const topicSchema = Joi.object({
-    title: Joi.string().min(3).required(),
-    category: Joi.string().min(2).required(),
+    title: Joi.string().min(2).required(),
+    category: Joi.string().min(1).required(),
     goal: Joi.string().allow('').optional(),
-    deadline: Joi.date().allow('', null).optional()
+    deadline: Joi.date().allow('', null).optional(),
+    difficulty: Joi.string().valid('Easy', 'Medium', 'Hard').optional()
 });
 
 const sessionSchema = Joi.object({
     topicId: Joi.string().required(),
     duration: Joi.number().min(1).required(),
-    notes: Joi.string().min(5).required(),
-    date: Joi.date().optional()
+    notes: Joi.string().min(1).required(),
+    date: Joi.date().optional(),
+    mood: Joi.string().valid('Great', 'Good', 'Okay', 'Tired', 'Frustrated').optional(),
+    difficulty: Joi.string().valid('Easy', 'Medium', 'Hard').optional()
 });
 
 exports.validateTopic = (req, res, next) => {

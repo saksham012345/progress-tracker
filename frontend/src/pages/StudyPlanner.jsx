@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Clock, BookOpen, CheckCircle, Loader2, Target, Save, Trash2, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, CheckCircle, Loader2, Target, Save, Trash2, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_URL } from '../config';
 import { AuthContext } from '../context/AuthContext';
 

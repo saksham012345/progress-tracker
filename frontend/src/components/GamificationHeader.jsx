@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Zap, Star, Trophy, Flame } from 'lucide-react';
+import { Zap, Star, Flame } from 'lucide-react';
 
 const GamificationHeader = ({ user }) => {
     if (!user) return null;
@@ -65,6 +65,17 @@ const GamificationHeader = ({ user }) => {
                     </div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total XP</span>
                 </div>
+
+                {user.badges?.length > 0 && (
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '120px' }}>
+                            {user.badges.slice(-4).map((b, i) => (
+                                <span key={i} title={b.name} style={{ fontSize: '1.2rem', cursor: 'default' }}>{b.icon}</span>
+                            ))}
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>{user.badges.length} Badges</span>
+                    </div>
+                )}
             </div>
         </motion.div>
     );

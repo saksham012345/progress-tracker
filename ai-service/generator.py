@@ -1,181 +1,145 @@
 import os
-import google.generativeai as genai
-
-# Configure Gemini
-api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
-
-GENERATOR_MODEL_NAME = "gemini-1.5-flash"
 import requests
 import json
+import re
 import logging
 
-# Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-GENERATOR_MODEL_NAME = "gemini-1.5-flash"
-API_KEY = os.getenv("GEMINI_API_KEY")
+GENERATOR_MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 
-def initialize_generator():
-    provider = get_provider()
-    if provider == "gemini":
-        print(f"Generator configured for Google Gemini using model: {GENERATOR_MODEL_NAME}")
-    else:
-        print(f"Generator configured for Local Ollama using model: {os.getenv('OLLAMA_MODEL', 'llama3')}")
-
+# ── Provider selection ────────────────────────────────────────────────────────
 def get_provider():
     if os.getenv("AI_PROVIDER") == "ollama":
         return "ollama"
     if os.getenv("GEMINI_API_KEY"):
         return "gemini"
-    return "ollama" # Default fallback if key is missing
+    return "ollama"
 
+def initialize_generator():
+    provider = get_provider()
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b") if provider == "ollama" else "gemini-1.5-flash"
+    print(f"Generator: provider={provider}, model={model}")
+
+# ── Ollama call ───────────────────────────────────────────────────────────────
 def call_ollama(prompt, model=None):
     if model is None:
-        model = os.getenv("OLLAMA_MODEL", "llama3")
+        model = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    
-    # Quick connectivity check (2s) to avoid hanging for 120s
+
     try:
-        health = requests.get(f"{base_url}/api/tags", timeout=2)
+        health = requests.get(f"{base_url}/api/tags", timeout=3)
         if health.status_code != 200:
-            return "Error: Ollama service returned an unexpected status. Please check if Ollama is running."
-    except requests.exceptions.ConnectionError:
-        return "Error: Cannot connect to Ollama at " + base_url + ". Please start Ollama first (run 'ollama serve')."
-    except requests.exceptions.Timeout:
-        return "Error: Ollama service is not responding. Please make sure Ollama is running."
-    
-    url = f"{base_url}/api/generate"
+            return "Error: Ollama not responding."
+    except Exception:
+        return "Error: Cannot connect to Ollama. Run 'ollama serve'."
+
     try:
-        response = requests.post(url, json={
+        response = requests.post(f"{base_url}/api/generate", json={
             "model": model,
             "prompt": prompt,
-            "stream": False
-        }, timeout=120)
-        
+            "stream": False,
+            "keep_alive": "30m",   # keep model in VRAM for 30 min between requests
+            "options": {
+                "num_predict": 512,
+                "temperature": 0.7,
+                "top_p": 0.9
+            }
+        }, timeout=180)
+
         if response.status_code == 200:
-            return response.json().get('response', '')
+            return response.json().get("response", "").strip()
         else:
-            logger.error(f"Ollama Error: {response.status_code} - {response.text}")
-            return f"Error: Local Ollama returned {response.status_code}. Is the model '{model}' downloaded? Try: ollama pull {model}"
+            logger.error(f"Ollama error {response.status_code}: {response.text[:200]}")
+            return f"Error: Ollama returned {response.status_code}. Is model '{model}' downloaded?"
+    except requests.exceptions.Timeout:
+        return "Error: Ollama timed out. The model may be loading — try again in 10 seconds."
     except Exception as e:
-        logger.error(f"Ollama Connection Error: {e}")
-        return "Error: Could not connect to local Ollama service. Please make sure it's running."
+        logger.error(f"Ollama exception: {e}")
+        return "Error: Could not connect to Ollama."
 
-def call_ai(prompt, model=GENERATOR_MODEL_NAME):
-    provider = get_provider()
-    if provider == "gemini":
-        return call_gemini_v1(prompt, model)
-    else:
-        return call_ollama(prompt)
-
-def call_gemini_v1(prompt, model=GENERATOR_MODEL_NAME):
-    if not API_KEY:
-        return "Error: API Key is missing."
-
-    url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
-    headers = {
-        "Content-Type": "application/json"
-    }
-    params = {
-        "key": API_KEY
-    }
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-
+# ── Gemini call ───────────────────────────────────────────────────────────────
+def call_gemini(prompt):
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return "Error: GEMINI_API_KEY not set."
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
     try:
-        response = requests.post(url, headers=headers, params=params, json=data, timeout=30)
-        
+        response = requests.post(url, params={"key": api_key},
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30)
         if response.status_code == 200:
-            result = response.json()
-            try:
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                return text
-            except (KeyError, IndexError) as e:
-                logger.error(f"Parsing Error: {e}, Response: {result}")
-                return "Error parsing AI response."
-        else:
-            logger.error(f"Gemini API V1 Error: {response.status_code} - {response.text}")
-            return f"Error: API returned {response.status_code}"
-            
+            return response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        logger.error(f"Gemini error {response.status_code}: {response.text[:200]}")
+        return f"Error: Gemini returned {response.status_code}"
     except Exception as e:
-        logger.error(f"Request Error: {e}")
-        return f"Error connecting to AI service: {e}"
+        return f"Error: {e}"
 
+# ── Unified call ──────────────────────────────────────────────────────────────
+def call_ai(prompt):
+    if get_provider() == "gemini":
+        return call_gemini(prompt)
+    return call_ollama(prompt)
 
+# ── Feature functions ─────────────────────────────────────────────────────────
 def generate_chat_response(message, history, context=""):
-    """
-    Generate a conversational response using chat history and context.
-    """
-    # 0. Basic Greetings Bypass
-    greetings = ["hi", "hello", "hey", "greetings", "good morning"]
+    greetings = {"hi", "hello", "hey", "greetings", "good morning", "sup"}
     if message.lower().strip() in greetings:
-        return "Hello! I am your HyperActive AI Assistant. How can I help you optimize your learning today?"
+        return "Hello! I'm your AI Study Coach. Ask me about your topics, progress, or study tips."
 
-    try:
-        # Construct a rich prompt with context
-        system_instruction = f"""
-You are an expert AI Study Assistant for HyperActive.
-Use the following Context to answer the user's question.
-If the answer is not in the context, use your general knowledge but mention that it's general advice.
+    # Keep context short for small models
+    ctx_snippet = context[:800] if context else ""
+    history_snippet = ""
+    if history:
+        recent = history[-4:]  # last 2 exchanges
+        history_snippet = "\n".join(f"{m['role'].capitalize()}: {m['content'][:200]}" for m in recent)
 
-Context:
-{context}
-"""
-        full_prompt = f"{system_instruction}\n\nUser: {message}"
-        
-        return call_ai(full_prompt)
-    except Exception as e:
-        return f"I encountered an error: {str(e)}"
+    prompt = f"""You are a helpful study coach. Answer briefly and directly.
+
+Context: {ctx_snippet}
+{f'Recent chat:{chr(10)}{history_snippet}' if history_snippet else ''}
+
+User: {message}
+Answer:"""
+    return call_ai(prompt)
 
 
 def generate_study_plan(topics, goals, hours_per_week):
-    prompt = f"""
-    Create a personalized weekly study plan.
-    Topics: {', '.join(topics)}
-    Goals: {goals}
-    Available Time: {hours_per_week} hours/week
-    
-    Format the output as a clear Weekly Schedule with daily activities.
-    """
+    prompt = f"""Create a weekly study schedule.
+Topics: {', '.join(topics)}
+Goal: {goals}
+Hours/week: {hours_per_week}
+
+Write a clear day-by-day plan. Be concise."""
     return call_ai(prompt)
 
 
 def generate_subtasks(task, context=""):
-    prompt = f"""
-    Break down the following learning task into 3-5 small, actionable sub-tasks.
-    Task: {task}
-    Additional Context: {context}
-    
-    Return ONLY a JSON list of strings.
-    Example: ["Understand basic syntax", "Practice simple loops", "Build a small CLI app"]
-    """
+    prompt = f"""Break this learning task into 4 short actionable steps.
+Task: {task}
+{f'Context: {context}' if context else ''}
+
+Return ONLY a JSON array of strings, no other text.
+Example: ["Step 1", "Step 2", "Step 3", "Step 4"]"""
+
     response = call_ai(prompt)
     try:
-        # Try to find JSON list in response
-        import re
-        match = re.search(r'\[.*\]', response, re.DOTALL)
+        match = re.search(r'\[.*?\]', response, re.DOTALL)
         if match:
-            import json
             return json.loads(match.group())
-        return [s.strip('- ') for s in response.split('\n') if s.strip()]
-    except:
-        return [s.strip() for s in response.split('\n') if s.strip()][:5]
+    except Exception:
+        pass
+    # Fallback: split lines
+    lines = [l.strip().lstrip('-•123456789. ') for l in response.split('\n') if l.strip()]
+    return [l for l in lines if l][:5]
 
 
-def generate_text(prompt, max_length=200):
-    """
-    Generate text using the configured AI provider.
-    This is a convenience wrapper around call_ai() used by the /rag/analyze and /rag/improve-notes endpoints.
-    """
+def generate_text(prompt, max_length=300):
     return call_ai(prompt)
 
 
 def construct_prompt(query, context_docs):
-    context_str = "\n".join(context_docs)
-    return f"Context:\n{context_str}\n\nQuestion: {query}\nAnswer:"
+    context_str = "\n".join(context_docs[:3])  # limit context
+    return f"Context:\n{context_str}\n\nQuestion: {query}\nAnswer briefly:"

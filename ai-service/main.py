@@ -43,6 +43,9 @@ class StudyPlanRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[dict] = []
+    notes: Optional[List[dict]] = []
+    resources: Optional[List[dict]] = []
+    user_context: Optional[str] = ""
 
 class DecomposeRequest(BaseModel):
     task: str
@@ -53,10 +56,13 @@ import threading
 def run_async_init():
     try:
         print("Starting background initialization of RAG index...")
-        # Preprocess data loads custom data from ai-service/data internally
-        docs = rag_pipeline.preprocess_data([]) 
+        docs = rag_pipeline.preprocess_data([])
         rag_pipeline.build_index(docs)
         print("Background initialization complete.")
+        # Warm up the model — send a dummy request so first real call is instant
+        print("Warming up model...")
+        generator.call_ai("Hello")
+        print(f"Model warm. Provider: {generator.get_provider()}, Model: {os.getenv('OLLAMA_MODEL', 'qwen2.5:0.5b')}")
     except Exception as e:
         print(f"Startup Error: {e}")
 
@@ -71,17 +77,19 @@ async def chat_endpoint(request: ChatRequest):
     # 1. Retrieve relevant context
     context_docs = rag_pipeline.retrieve(request.message, k=2)
     context_text = "\n".join(context_docs)
-    
-    # 2. Generate response with history
+
+    # 2. Append user_context (coach memory) if provided
+    if request.user_context:
+        context_text = request.user_context + "\n\n" + context_text
+
+    # 3. Generate response with history
     response = generator.generate_chat_response(
-        request.message, 
-        request.history, 
+        request.message,
+        request.history,
         context_text
     )
-    
-    # Clean up output
+
     final_response = response.split("Assistant:")[-1].strip()
-    
     return {"reply": final_response}
 
 # Removed duplicate /rag/study-plan logic
@@ -89,47 +97,28 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.post("/rag/analyze")
 async def analyze_progress(request: AnalyzeRequest):
-    # 1. Build Index from current data (In a real app, this would be incremental or persisted)
-    # Combining topics and sessions for context
     combined_data = [t.dict() for t in request.topics] + [s.dict() for s in request.sessions]
     doc_count = rag_pipeline.build_index(combined_data)
-    
+
     if doc_count == 0:
-        return {"summary": "No data available to analyze. Start learning!"}
-    
-    # 2. Retrieve relevant context
-    # For a summary, we might want generic high-level context, or just recent ones.
-    # Simple strategy: retrieve top 5 most relevant to "progress summary"
-    context = rag_pipeline.retrieve("progress summary learning", k=5)
-    
-    # 3. Generate Response
-    prompt = generator.construct_prompt(request.query, context)
-    # Limit max length for summary
-    response_text = generator.generate_text(prompt, max_length=200)
-    
-    # Clean up response (simple post-processing to remove prompt if echo'd)
-    # GPT-2 style models often echo.
-    final_response = response_text.replace(prompt, "").strip()
-    
-    return {"summary": final_response, "context_used": context}
+        return {"summary": "No data yet. Start logging study sessions!"}
+
+    context = rag_pipeline.retrieve("progress summary", k=3)
+    prompt = f"""Summarize this student's learning progress briefly.
+Context: {chr(10).join(context[:2])}
+Question: {request.query}
+Answer in 3-4 sentences:"""
+
+    response_text = generator.call_ai(prompt)
+    return {"summary": response_text, "context_used": context}
 
 @app.post("/rag/improve-notes")
 async def improve_notes(request: ImproveNotesRequest):
-    # For improving notes, we might not need the index if it's just rewriting.
-    # But RAG could help if we indexed textbook material.
-    # Here, we'll just use the LLM to rewrite.
-    
-    prompt = f"""
-    Rewrite these notes to be clear and structured:
-    {request.notes}
-    
-    Improved Notes:
-    """
-    
-    response_text = generator.generate_text(prompt, max_length=200)
-    final_response = response_text.replace(prompt, "").strip()
-    
-    return {"improvedNotes": final_response}
+    prompt = f"""Rewrite these study notes to be clearer and better structured. Be concise.
+Notes: {request.notes[:600]}
+Improved notes:"""
+    response_text = generator.call_ai(prompt)
+    return {"improvedNotes": response_text}
 
 @app.post("/rag/plan")
 async def generate_study_plan(request: StudyPlanRequest):
@@ -149,9 +138,67 @@ async def decompose_task(request: DecomposeRequest):
     # Expected format: JSON list of strings from generator
     return {"subTasks": sub_tasks}
 
+class QuizRequest(BaseModel):
+    topic: str
+    notes: str
+    difficulty: Optional[str] = "Medium"
+
+class GradeRequest(BaseModel):
+    questions: List[dict]  # [{ question, userAnswer, correctAnswer }]
+
 class ResourceRequest(BaseModel):
     category: str
     content: str
+
+@app.post("/rag/quiz")
+async def generate_quiz(request: QuizRequest):
+    """Generate 5 quiz questions from topic notes."""
+    notes_snippet = request.notes[:1000] if request.notes else f"General knowledge about {request.topic}"
+    prompt = f"""Generate 5 quiz questions about: {request.topic} ({request.difficulty})
+Notes: {notes_snippet}
+
+Return ONLY a JSON array, no other text:
+[{{"question":"...","correctAnswer":"...","hint":"..."}}]"""
+
+    response = generator.call_ai(prompt)
+    try:
+        import re, json
+        match = re.search(r'\[.*\]', response, re.DOTALL)
+        if match:
+            questions = json.loads(match.group())
+            if isinstance(questions, list) and len(questions) > 0:
+                return {"questions": questions}
+    except Exception:
+        pass
+    return {"questions": [], "error": "Could not parse questions. Try again or add more session notes."}
+
+@app.post("/rag/grade")
+async def grade_quiz(request: GradeRequest):
+    """Grade answers using AI semantic matching."""
+    graded = []
+    for q in request.questions:
+        prompt = f"""Grade this answer. Reply ONLY with JSON.
+Q: {q.get('question','')}
+Correct: {q.get('correctAnswer','')}
+User: {q.get('userAnswer','')}
+JSON: {{"isCorrect":true/false,"feedback":"one sentence"}}"""
+
+        response = generator.call_ai(prompt)
+        try:
+            import re, json
+            match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            result = json.loads(match.group()) if match else {"isCorrect": False, "feedback": "Could not grade."}
+        except Exception:
+            result = {"isCorrect": False, "feedback": "Could not grade."}
+
+        graded.append({
+            "question": q.get("question"),
+            "userAnswer": q.get("userAnswer"),
+            "correctAnswer": q.get("correctAnswer"),
+            "isCorrect": bool(result.get("isCorrect", False)),
+            "feedback": result.get("feedback", "")
+        })
+    return {"graded": graded}
 
 @app.post("/rag/knowledge")
 async def add_knowledge(request: ResourceRequest):

@@ -51,17 +51,25 @@ const Layout = ({ children }) => {
   React.useEffect(() => {
     if (user && token) {
       ReminderService.start(token, (reminder) => {
-        // Play notification sound
+        // Play alarm sound via Web Audio API — no external URL needed
         try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-          audio.volume = 0.5;
-          audio.play();
-        } catch (e) {
-          console.log('Audio Blocked');
-        }
-        
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const playTone = (freq, start, dur) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.4, ctx.currentTime + start);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+            osc.start(ctx.currentTime + start);
+            osc.stop(ctx.currentTime + start + dur);
+          };
+          // Urgent 4-beep pattern
+          [0, 0.3, 0.6, 0.9].forEach(t => playTone(880, t, 0.2));
+        } catch (e) { console.log('Audio blocked by browser'); }
+
         setActiveNotification(reminder);
-        // Auto-dismiss after 8 seconds
         setTimeout(() => setActiveNotification(null), 8000);
       });
     } else {

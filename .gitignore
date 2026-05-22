@@ -1,11 +1,13 @@
-# Environment Files (Secrets)
+# Environment Files (Secrets — never commit these)
 .env
 .env.local
-.env.production
 backend/.env
-frontend/.env
+frontend/.env.local
 ai-service/.env
 .DS_Store
+
+# .env.production is safe to commit (no secrets, just public URLs)
+# frontend/.env.production — committed intentionally
 
 # Python
 __pycache__/
